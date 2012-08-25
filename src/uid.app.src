@@ -12,8 +12,7 @@
       {applications,[
          kernel,
          stdlib,
-         pts,
-         feta
+         pts
       ]},
       {mod, {uid_app, []}},
       {env, []}
