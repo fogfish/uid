@@ -1,0 +1,21 @@
+{application, uid,
+   [
+      {description, "unique identity service"},
+      {vsn,         "0.1.0"},
+      {modules,     [
+         uid,
+         uid_seq,
+         uid_sup,         
+         uid_app
+      ]},
+      {registered,  []},
+      {applications,[
+         kernel,
+         stdlib,
+         pts,
+         feta
+      ]},
+      {mod, {uid_app, []}},
+      {env, []}
+   ]
+}.  
