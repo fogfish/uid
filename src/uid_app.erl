@@ -47,10 +47,9 @@ stop(_State) ->
 %% define global sequence table
 def_seq() ->
    ok = pts:new({uid, seq}, [
-      rthrough,
+      'read-through',
       readonly,
-      {iftype, server},
-      {factory, fun uid_sup:spawn/1}
+      {factory, fun uid_sup:spawn/2}
    ]).
 
 

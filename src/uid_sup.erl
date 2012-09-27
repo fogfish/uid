@@ -19,7 +19,7 @@
 -behaviour(supervisor).
 -author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
--export([start_link/0, init/1, spawn/1]).
+-export([start_link/0, init/1, spawn/2]).
 
 
 %%
@@ -42,7 +42,7 @@ init(Cfg) ->
 
 %%
 %%
-spawn(Req) ->
-   supervisor:start_child(?MODULE, Req).
+spawn(Ns, Uid) ->
+   supervisor:start_child(?MODULE, [Ns, Uid]).
 
 

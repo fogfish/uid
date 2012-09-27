@@ -20,18 +20,19 @@
 -behaviour(gen_server).
 -author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
--export([start_link/1, to_list/1]).
+-export([start_link/2, to_list/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 %%
 %% internal state
 -record(srv, {
+   ns,    % name space
 	uid,   % uid
    file,  % file name persist state
    csync, % count to sync  
    tsync, % time  to sync
 
-   cnt,   % number of retriven values
+   cnt,   % number of retrieve values
    seq    % current seq value
 }).
 -define(SEQDIR, "/tmp").
@@ -39,43 +40,35 @@
 -define(TSYNC,   10000).
 
 
-start_link({_Parent, {{uid, seq}, Uid}}) ->
-   gen_server:start_link(?MODULE, [Uid], []).
+start_link(Ns, Uid) ->
+   gen_server:start_link(?MODULE, [Ns, Uid], []).
 
-init([Uid]) ->
+init([Ns, Uid]) ->
    % config
    Dir   = config(seqdir, ?SEQDIR),
    CSync = config(csync,  ?CSYNC),
    TSync = config(tsync,  ?TSYNC),
    % define
+   pns:register(Ns, Uid),
    File = filename:join([Dir, to_list(Uid) ++ ".seq"]),
-   case filelib:is_file(File) of
+   {Cnt, Seq} = case filelib:is_file(File) of
    	true  ->
-   	   {ok, [{seq, Cnt, Seq}]} = file:consult(File),
-   	   ok = pts:attach({{uid, seq}, Uid}),
-   	   {ok,
-   	      #srv{
-   	         uid  = Uid,
-               file = File,
-               tsync= TSync,
-               csync= CSync,
-               cnt  = Cnt,
-               seq  = Seq
-   	      }
-   	   };
-   	false ->
-   	   ok = pts:attach({{uid, seq}, Uid}),
-   	   {ok, 
-   	      #srv{
-   	         uid  = Uid,
-               file = File,
-               tsync= TSync,
-               csync= CSync,
-               cnt  = 0,
-               seq  = 1
-   	      }
-   	   }
-   end.
+   	   {ok, [{seq, Cnt0, Seq0}]} = file:consult(File),
+   	   {Cnt0, Seq0}; 
+   	false -> 
+         {0, 1}
+   end,
+   {ok,
+      #srv{
+         ns   = Ns,
+         uid  = Uid,
+         file = File,
+         tsync= TSync,
+         csync= CSync,
+         cnt  = Cnt,
+         seq  = Seq
+      }
+   }.
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -85,10 +78,6 @@ init([Uid]) ->
 
 %%
 %%
-handle_call({get, _}, _, #srv{seq=Seq, cnt=Cnt, tsync=Tout}=S) ->
-   Val = hash:seq32(Seq), 
-   {reply, {ok, Val}, csync(S#srv{seq=Val, cnt=Cnt + 1}), Tout};
-
 handle_call(_, _Tx, S) ->
    {noreply, sync(S)}.
 
@@ -102,14 +91,23 @@ handle_cast(_, S) ->
 handle_info(timeout, S) ->
    {noreply, sync(S)};
 
+handle_info({get, Tx, _Key}, #srv{seq=Seq, cnt=Cnt, tsync=Tout}=S) ->
+   Val = hash:seq32(Seq), 
+   gen_server:reply(Tx, {ok, Val}),
+   {noreply, maybe_sync(S#srv{seq=Val, cnt=Cnt + 1}), Tout};
+
 handle_info(_, S) ->
    {noreply, sync(S)}.
 
-terminate(_Reason, #srv{uid=Uid}=S) ->
+%%
+%%
+terminate(_Reason, #srv{ns=Ns, uid=Uid}=S) ->
    sync(S),
-   pts:detach({{aika, stream}, Uid}),
+   pns:unregister(Ns, Uid),
    ok.
 
+%%
+%%
 code_change(_OldVsn, S, _Extra) ->
    {ok, S}.  
 
@@ -129,14 +127,14 @@ config(Key, Default) ->
    end.
 
 %%
-%%
-csync(#srv{csync=false}=S) ->
+%% sync data on count threshold 
+maybe_sync(#srv{csync=false}=S) ->
    S;
-csync(#srv{csync=Sync, cnt=Cnt}=S)
+maybe_sync(#srv{csync=Sync, cnt=Cnt}=S)
  when Cnt rem Sync =:= 0 ->
    sync(S);
 
-csync(S) ->
+maybe_sync(S) ->
    S.
 
 %%
