@@ -26,15 +26,11 @@
 %%
 start(_Type, _Args) -> 
    case uid_sup:start_link() of
-      {ok, Pid} -> 
-         def_seq(), 
-         {ok, Pid};
-      Other     -> 
-         {error, Other}
+      {ok, Pid} -> {ok, Pid};
+      Other     -> {error, Other}
    end.
 
 stop(_State) ->
-   pts:drop({aika, stream}),
    ok.
 
 %%-----------------------------------------------------------------------------
@@ -43,14 +39,6 @@ stop(_State) ->
 %%
 %%-----------------------------------------------------------------------------
 
-%%
-%% define global sequence table
-def_seq() ->
-   ok = pts:new({uid, seq}, [
-      'read-through',
-      readonly,
-      {factory, fun uid_sup:spawn/2}
-   ]).
 
 
 

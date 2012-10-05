@@ -17,7 +17,8 @@
 %%     unique identity
 %%
 -module(uid).
--export([start/0, start/1, seq32/1]).
+-export([start/0, start/1]).
+-export([new/1, seq32/1]).
 
 %%
 %%
@@ -45,8 +46,17 @@ start(Config) ->
 
 %%
 %%
+new({seq, Uid}) ->
+   supervisor:start_child(uid_sup, {
+      Uid,
+      {uid_seq, start_link, [Uid]},
+      permanent, 1000, worker, dynamic    
+   }).
+
+%%
+%%
 seq32(Uid) ->
-   {ok, Val} = pts:get({uid, seq}, Uid),
+   {ok, Val} = gen_server:call({global, Uid}, seq32),
    Val.
 
 

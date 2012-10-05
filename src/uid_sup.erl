@@ -19,7 +19,7 @@
 -behaviour(supervisor).
 -author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
--export([start_link/0, init/1, spawn/2]).
+-export([start_link/0, init/1]).
 
 
 %%
@@ -28,21 +28,11 @@
 start_link() ->
    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
    
-init(Cfg) -> 
+init(_) -> 
    {ok,
       {
-         {simple_one_for_one, 2, 3600},  % 2 failure in hour
-         [{
-      		uid_seq, 
-      		{uid_seq, start_link, []},
-      		permanent, 5000, worker, dynamic
-   		}]
+         {one_for_one, 2, 3600},  % 2 failure in hour
+         []
       }
    }.
-
-%%
-%%
-spawn(Ns, Uid) ->
-   supervisor:start_child(?MODULE, [Ns, Uid]).
-
 

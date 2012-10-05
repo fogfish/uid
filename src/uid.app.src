@@ -11,8 +11,7 @@
       {registered,  []},
       {applications,[
          kernel,
-         stdlib,
-         pts
+         stdlib
       ]},
       {mod, {uid_app, []}},
       {env, []}
