@@ -15,48 +15,33 @@
 %%
 %%  @description
 %%     unique identity
-%%
 -module(uid).
--export([start/0, start/1]).
--export([new/1, seq32/1]).
+-include("uid.hrl").
+
+-export([
+   start/0,
+   local/1, global/1, seq32/1
+]).
 
 %%
 %%
 start() ->
-   start([]).
-
-start(Config) ->
-   lists:foreach(
-      fun({K, V}) -> application:set_env(?MODULE, K, V) end,
-      Config
-   ),
-   AppFile = code:where_is_file(atom_to_list(?MODULE) ++ ".app"),
-   {ok, [{application, _, List}]} = file:consult(AppFile), 
-   Apps = proplists:get_value(applications, List, []),
-   lists:foreach(
-      fun(X) -> 
-         ok = case application:start(X) of
-            {error, {already_started, X}} -> ok;
-            Ret -> Ret
-         end
-      end,
-      lists:delete(kernel, lists:delete(stdlib, Apps))
-   ),
-   application:start(?MODULE).
+   applib:boot(?MODULE, []).
 
 %%
 %%
-new({seq, Uid}) ->
-   supervisor:start_child(uid_sup, {
-      Uid,
-      {uid_seq, start_link, [Uid]},
-      permanent, 1000, worker, dynamic    
-   }).
+local({seq, Uid}) ->
+   uid_local_sup:seq(Uid).
+
+%%
+%%
+global({seq, Uid}) ->
+   uid_global_sup:seq(Uid).
 
 %%
 %%
 seq32(Uid) ->
-   {ok, Val} = gen_server:call({global, Uid}, seq32),
+   {ok, Val} = gen_server:call(Uid, seq32, ?SEQ_TIMEOUT),
    Val.
 
 

@@ -14,56 +14,61 @@
 %%   limitations under the License.
 %%
 %%  @description
-%%     unique identity
-%%
+%%     unique sequential identity allocator
 -module(uid_seq).
 -behaviour(gen_server).
--author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
+-include("uid.hrl").
 
--export([start_link/1]).
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
+-export([
+   start_link/2,
+   init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3
+]).
 
 %%
 %% internal state
 -record(srv, {
-   file,  % file name persist state
-   csync, % count to sync  
-   tsync, % time  to sync
+   mode,       % mode
+   name,       % 
+   file,       % file name persist state
+   lock,       % global lock object
 
-   cnt,   % number of retrieve values
-   seq    % current seq value
+   pos,        % current seq position 
+   val,        % current seq value
+   seq         % pool of allocated seq value
 }).
--define(SEQDIR, "/tmp").
 -define(CSYNC,   false).
 -define(TSYNC,   10000).
 
 
-start_link(Uid) ->
-   gen_server:start_link({global, Uid}, ?MODULE, [Uid], []).
+%%
+%%
+start_link(Mode, Name) ->
+   gen_server:start_link({local, Name}, ?MODULE, [Mode, Name], []).
 
-init([Uid]) ->
-   % config
-   Root  = config(seqdir, ?SEQDIR),
-   CSync = config(csync,  ?CSYNC),
-   TSync = config(tsync,  ?TSYNC),
-   File = filename:join([Root, atom_to_list(Uid) ++ ".seq"]),
-   {Cnt, Seq} = case filelib:is_file(File) of
-   	true  ->
-   	   {ok, [{seq, Cnt0, Seq0}]} = file:consult(File),
-   	   {Cnt0, Seq0}; 
-   	false -> 
-         {0, 1}
-   end,
+init([Mode, Name]) ->
    process_flag(trap_exit, true),
    {ok,
-      #srv{
-         file = File,
-         tsync= TSync,
-         csync= CSync,
-         cnt  = Cnt,
-         seq  = Seq
-      }
+      maybe_global_seq( 
+         recover_seq_state(empty_seq(Mode, Name))
+      )
+   }. 
+
+%%
+%%
+empty_seq(Mode, Name) ->
+   #srv{
+      mode = Mode,
+      name = Name,
+      file = seq_file(Name),
+      seq  = []
    }.
+
+%%
+%%
+terminate(_Reason, S) ->
+   persist_seq_state(S),
+   ok.
+
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -73,35 +78,27 @@ init([Uid]) ->
 
 %%
 %%
-handle_call(seq32, _Tx, #srv{seq=Seq, cnt=Cnt, tsync=Timeout}=S) ->
-   Val = seq32(Seq), 
-   {reply,
-      {ok, Val},
-      maybe_sync(S#srv{seq=Val, cnt=Cnt + 1}), 
-      Timeout
-   };
+handle_call(seq32, Tx,  #srv{seq=[]}=S) ->
+   handle_call(seq32, Tx, allocate_seq_pool(S));
 
-handle_call(_, _Tx, S) ->
-   {noreply, sync(S)}.
+handle_call(seq32, _Tx, #srv{seq=[Val | Seq]}=S) ->
+   {reply, {ok, Val}, S#srv{seq=Seq}};
+
+handle_call(_, _, S) ->
+   {noreply, S}.
 
 %%
 %%
 handle_cast(_, S) ->
-   {noreply, sync(S)}.
+   {noreply, S}.
 
 %%
 %%
-handle_info(timeout, S) ->
-   {noreply, sync(S)};
+handle_info(checkpoint, S) ->
+   {noreply, checkpoint(S)};
 
 handle_info(_, S) ->
-   {noreply, sync(S)}.
-
-%%
-%%
-terminate(_Reason, S) ->
-   sync(S),
-   ok.
+   {noreply, S}.
 
 %%
 %%
@@ -124,21 +121,125 @@ config(Key, Default) ->
    end.
 
 %%
-%% sync data on count threshold 
-maybe_sync(#srv{csync=false}=S) ->
+%%
+seq_file(Name)
+ when is_atom(Name) ->
+   filename:join([config(seqdir, default_seq_dir()), atom_to_list(Name) ++ ".seq"]).
+
+default_seq_dir() ->
+   filename:join([config(seqdir, ?SEQDIR), atom_to_list(erlang:node())]).
+
+%%
+%% recover seq state from file
+recover_seq_state(#srv{file=File}=S) ->
+   maybe_recover_seq_state(filelib:is_file(File), S).
+
+maybe_recover_seq_state(true,  #srv{file=File}=S) ->
+   {ok, [{seq, Pos, Val}]} = file:consult(File),
+   S#srv{pos=Pos, val=Val};
+maybe_recover_seq_state(false, S) ->
+   {Pos, Val} = ?SEED_SEQ32,
+   S#srv{pos=Pos, val=Val}.
+
+%%
+%%
+persist_seq_state(#srv{file=File, pos=Pos, val=Val}=S) ->
+   ok = filelib:ensure_dir(File),
+   ok = file:write_file(File, io_lib:format("~p.", [{seq, Pos, Val}])),
+   S.
+
+%%
+%%
+allocate_seq_pool(#srv{seq=[], mode=local, pos=Pos, val=Val}=S) ->
+   [Last | Seq] = seq32(Val, ?POOL_SEQ32),
+   persist_seq_state(
+      S#srv{
+         seq = lists:reverse([Last | Seq]),
+         pos = Pos + ?POOL_SEQ32,
+         val = Last
+      }
+   );
+
+allocate_seq_pool(#srv{seq=[], mode=global, lock=Lock}=S) ->
+   maybe_allocate_seq_pool(ek:lease(Lock, ?SEQ_TIMEOUT), S).
+
+maybe_allocate_seq_pool(Token, #srv{pos=Pos, val=Val, lock=Lock}=S)
+ when is_number(Token) ->
+   [Last | Seq] = seq32(skip(Val, Token - Pos), ?POOL_SEQ32),
+   ek:release(Lock, Token + ?POOL_SEQ32),
+   %io:format("got token: ~p~n", [Token]),
+   persist_seq_state(
+      S#srv{
+         seq = lists:reverse([Last | Seq]),
+         pos = Token + ?POOL_SEQ32,
+         val = Last
+      }
+   );
+
+maybe_allocate_seq_pool(undefined, #srv{lock=Lock}=S) ->
+   % token is not know by local node
+   ek:release(Lock, undefined),
    S;
-maybe_sync(#srv{csync=Sync, cnt=Cnt}=S)
- when Cnt rem Sync =:= 0 ->
-   sync(S);
 
-maybe_sync(S) ->
+maybe_allocate_seq_pool(timeout, #srv{name=Name}=S) ->
+   error_logger:error_msg("seq ~s token timeout", [Name]),
    S.
 
 %%
 %%
-sync(#srv{file=File, cnt=Cnt, seq=Seq}=S) ->
-   ok = file:write_file(File, io_lib:format("~p.", [{seq, Cnt, Seq}])),
+checkpoint(#srv{lock=Lock}=S) ->
+   maybe_checkpoint(ek:lease(Lock, ?SEQ_TIMEOUT), S).
+
+maybe_checkpoint(Token, #srv{pos=Pos, val=Val, lock=Lock}=S)
+ when is_number(Token) ->
+   timer:send_after(?SEQ_CHECKPOINT, checkpoint),
+   ek:release(Lock, Token),
+   persist_seq_state(
+      S#srv{
+         pos = Token,
+         val = skip(Val, Token - Pos)
+      }
+   );
+
+maybe_checkpoint(_, #srv{name=Name}=S) ->
+   timer:send_after(?SEQ_CHECKPOINT, checkpoint),
+   error_logger:error_msg("seq ~s checkpoint failed", [Name]),
    S.
+
+%%
+%%
+maybe_global_seq(#srv{mode=global, name=Name, pos=Pos}=S) ->
+   {ok, Pid} = case config(role, slave) of
+      slave  -> 
+         ek:lock({seq, Name}, undefined);
+      leader -> 
+         timer:send_after(?SEQ_CHECKPOINT, checkpoint),
+         ek:lock({seq, Name}, Pos)
+   end,
+   S#srv{
+      lock = Pid
+   }.
+
+%%
+%%
+seq32(Val, Len)
+ when is_number(Val) ->
+   seq32([seq32(Val)], Len - 1);
+
+seq32(Seq, 0) ->
+   Seq;
+seq32([H | _]=Seq, Len) ->
+   seq32([seq32(H) | Seq], Len - 1).
+
+%%
+%%
+skip(Val, N)
+ when N > 0  ->
+   skip(seq32(Val), N - 1);
+
+skip(Val, 0) -> 
+   Val.
+
 
 
 %% Additive congruential method of generating values in 

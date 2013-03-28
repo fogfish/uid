@@ -1,5 +1,9 @@
 .PHONY: deps test rel
 
+ifeq ($(id),)
+export id=uid
+endif
+
 all: rebar deps compile
 
 compile:
@@ -28,7 +32,11 @@ rel:
 	./rebar generate
 
 run:
-	erl -pa ./deps/*/ebin -pa ./*/ebin -pa ./ebin -pa ./priv
+	erl -name ${id}@127.0.0.1 -setcookie uid \
+	    -pa ./deps/*/ebin \
+	    -pa ./*/ebin \
+	    -pa ./ebin \
+	    -pa ./priv
 
 rebar:
 	curl -O https://raw.github.com/wiki/basho/rebar/rebar

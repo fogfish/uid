@@ -19,10 +19,10 @@
 -behaviour(supervisor).
 -author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
--export([start_link/0, init/1]).
+-export([
+   start_link/0, init/1
+]).
 
-
-%%
 %%
 %%
 start_link() ->
@@ -32,7 +32,14 @@ init(_) ->
    {ok,
       {
          {one_for_one, 2, 3600},  % 2 failure in hour
-         []
+         [local()]
       }
+   }.
+
+local() ->
+   {
+      local,
+      {uid_local_sup, start_link, []},
+      permanent, 10000, supervisor, dynamic
    }.
 
