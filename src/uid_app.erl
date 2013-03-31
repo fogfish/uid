@@ -25,20 +25,19 @@
 %%
 %%
 start(_Type, _Args) -> 
-   case uid_sup:start_link() of
-      {ok, Pid} -> {ok, Pid};
-      Other     -> {error, Other}
-   end.
+   {ok, Sup} = uid_sup:start_link(),
+   lists:foreach(fun default_seq/1, opts:val(default, [], uid)),
+   {ok, Sup}.
 
 stop(_State) ->
    ok.
 
-%%-----------------------------------------------------------------------------
 %%
-%% private
 %%
-%%-----------------------------------------------------------------------------
+default_seq({local,  Type, Name}) ->
+   uid:local({Type, Name});
 
-
+default_seq({global, Type, Name}) ->
+   uid:global({Type, Name}).
 
 
