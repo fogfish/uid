@@ -216,9 +216,10 @@ maybe_global_seq(#srv{mode=global, name=Name, pos=Pos}=S) ->
          timer:send_after(?SEQ_CHECKPOINT, checkpoint),
          ek:lock({seq, Name}, Pos)
    end,
-   S#srv{
-      lock = Pid
-   }.
+   S#srv{lock = Pid};
+
+maybe_global_seq(#srv{mode=local}=S) ->
+   S.
 
 %%
 %%
