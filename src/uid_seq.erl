@@ -31,6 +31,7 @@
    name,       % 
    file,       % file name persist state
    lock,       % global lock object
+   pool,       % size of seq pool
 
    pos,        % current seq position 
    val,        % current seq value
@@ -60,7 +61,8 @@ empty_seq(Mode, Name) ->
       mode = Mode,
       name = Name,
       file = seq_file(Name),
-      seq  = []
+      seq  = [],
+      pool = opts:val(alloc, ?POOL_SEQ32, uid)
    }.
 
 %%
@@ -78,6 +80,11 @@ terminate(_Reason, S) ->
 
 %%
 %%
+handle_call(i, _, S) ->
+   % read sequence meta data
+   Result = {S#srv.mode, S#srv.pos, S#srv.val},
+   {reply, {ok, Result}, S};
+
 handle_call(seq32, Tx,  #srv{seq=[]}=S) ->
    handle_call(seq32, Tx, allocate_seq_pool(S));
 
@@ -150,12 +157,12 @@ persist_seq_state(#srv{file=File, pos=Pos, val=Val}=S) ->
 
 %%
 %%
-allocate_seq_pool(#srv{seq=[], mode=local, pos=Pos, val=Val}=S) ->
-   [Last | Seq] = seq32(Val, ?POOL_SEQ32),
+allocate_seq_pool(#srv{seq=[], mode=local, pos=Pos, val=Val, pool=Pool}=S) ->
+   [Last | Seq] = seq32(Val, Pool),
    persist_seq_state(
       S#srv{
          seq = lists:reverse([Last | Seq]),
-         pos = Pos + ?POOL_SEQ32,
+         pos = Pos + Pool,
          val = Last
       }
    );
@@ -163,15 +170,15 @@ allocate_seq_pool(#srv{seq=[], mode=local, pos=Pos, val=Val}=S) ->
 allocate_seq_pool(#srv{seq=[], mode=global, lock=Lock}=S) ->
    maybe_allocate_seq_pool(ek:lease(Lock, ?SEQ_TIMEOUT), S).
 
-maybe_allocate_seq_pool(Token, #srv{pos=Pos, val=Val, lock=Lock}=S)
+maybe_allocate_seq_pool(Token, #srv{pos=Pos, val=Val, lock=Lock, pool=Pool}=S)
  when is_number(Token) ->
-   [Last | Seq] = seq32(skip(Val, Token - Pos), ?POOL_SEQ32),
-   ek:release(Lock, Token + ?POOL_SEQ32),
+   [Last | Seq] = seq32(skip(Val, Token - Pos), Pool),
+   ek:release(Lock, Token + Pool),
    %io:format("got token: ~p~n", [Token]),
    persist_seq_state(
       S#srv{
          seq = lists:reverse([Last | Seq]),
-         pos = Token + ?POOL_SEQ32,
+         pos = Token + Pool,
          val = Last
       }
    );

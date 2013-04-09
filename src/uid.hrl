@@ -5,7 +5,7 @@
 %%%----------------------------------------------------------------------------   
 
 -define(SEED_SEQ32,     {0,1}). % initial seed
--define(POOL_SEQ32,         2). % pool of per-allocated values
+-define(POOL_SEQ32,       100). % pool of per-allocated values
 
 -define(SEQDIR,        "/tmp").
 

@@ -20,7 +20,7 @@
 
 -export([
    start/0,
-   local/1, global/1, seq32/1
+   local/1, global/1, i/1, seq32/1
 ]).
 
 %%
@@ -37,6 +37,11 @@ local({seq, Uid}) ->
 %%
 global({seq, Uid}) ->
    uid_global_sup:seq(Uid).
+
+%%
+%%
+i(Uid) ->
+   gen_server:call(Uid, i, ?SEQ_TIMEOUT).
 
 %%
 %%
