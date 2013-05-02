@@ -19,14 +19,24 @@
 -include("uid.hrl").
 
 -export([
-   start/0,
-   local/1, global/1, i/1, seq32/1
+   start/0, 
+   start_link/2, local/1, global/1, i/1, 
+   seq32/1
 ]).
 
 %%
 %%
 start() ->
    applib:boot(?MODULE, []).
+
+%%
+%%
+start_link(local,  {uid, Uid}) ->
+   uid_seq:start_link(local,  Uid);
+
+start_link(global, {uid, Uid}) ->
+   uid_seq:start_link(global, Uid).
+
 
 %%
 %%
