@@ -31,10 +31,10 @@ start() ->
 
 %%
 %%
-start_link(local,  {uid, Uid}) ->
+start_link(local,  {seq, Uid}) ->
    uid_seq:start_link(local,  Uid);
 
-start_link(global, {uid, Uid}) ->
+start_link(global, {seq, Uid}) ->
    uid_seq:start_link(global, Uid).
 
 
