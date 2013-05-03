@@ -201,6 +201,7 @@ maybe_checkpoint(Token, #srv{pos=Pos, val=Val, lock=Lock}=S)
  when is_number(Token) ->
    timer:send_after(?SEQ_CHECKPOINT, checkpoint),
    ek:release(Lock, Token),
+   ?DEBUG("uid checkpoint global ~s (token: ~p)", [S#srv.name, Token]),
    persist_seq_state(
       S#srv{
          pos = Token,
@@ -218,14 +219,17 @@ maybe_checkpoint(_, #srv{name=Name}=S) ->
 maybe_global_seq(#srv{mode=global, name=Name, pos=Pos}=S) ->
    {ok, Pid} = case config(role, slave) of
       slave  -> 
+         ?DEBUG("uid init global ~s (~s)", [S#srv.name, S#srv.file]),
          ek:lock({seq, Name}, undefined);
       leader -> 
          timer:send_after(?SEQ_CHECKPOINT, checkpoint),
+         ?DEBUG("uid init global ~s (file: ~s, pos: ~p)", [S#srv.name, S#srv.file, Pos]),
          ek:lock({seq, Name}, Pos)
    end,
    S#srv{lock = Pid};
 
 maybe_global_seq(#srv{mode=local}=S) ->
+   ?DEBUG("uid init local  ~s (~s)", [S#srv.name, S#srv.file]),
    S.
 
 %%
