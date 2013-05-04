@@ -4,7 +4,7 @@
 %%%
 %%%----------------------------------------------------------------------------   
 
-%-define(VERBOSE, true).
+-define(VERBOSE, true).
 -ifdef(VERBOSE).
    -define(DEBUG(Str, Args), error_logger:info_msg(Str, Args)).
 -else.

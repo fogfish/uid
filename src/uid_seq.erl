@@ -172,6 +172,7 @@ allocate_seq_pool(#srv{seq=[], mode=global, lock=Lock}=S) ->
 
 maybe_allocate_seq_pool(Token, #srv{pos=Pos, val=Val, lock=Lock, pool=Pool}=S)
  when is_number(Token) ->
+   ?DEBUG("uid global ~s (token: ~p, pos: ~p)", [S#srv.name, Token, Pos]),
    [Last | Seq] = seq32(skip(Val, Token - Pos), Pool),
    ek:release(Lock, Token + Pool),
    %io:format("got token: ~p~n", [Token]),
