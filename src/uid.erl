@@ -20,7 +20,8 @@
 
 -export([
    start/0, 
-   start_link/2, local/1, global/1, i/1, 
+   start_link/1, start_link/2, 
+   local/1, global/1, i/1, 
    seq32/1
 ]).
 
@@ -31,6 +32,12 @@ start() ->
 
 %%
 %%
+start_link(Opts) ->
+   start_link(
+      proplists:get_value(uid, Opts, local),
+      proplists:lookup(seq, Opts)
+   ).
+
 start_link(local,  {seq, Uid}) ->
    uid_seq:start_link(local,  Uid);
 
@@ -39,12 +46,14 @@ start_link(global, {seq, Uid}) ->
 
 
 %%
-%%
+%% create new local sequence, 
+%% attach to uid app supervisor tree
 local({seq, Uid}) ->
    uid_local_sup:seq(Uid).
 
 %%
-%%
+%% create new global sequence
+%% attach to uid app supervisor tree
 global({seq, Uid}) ->
    uid_global_sup:seq(Uid).
 
