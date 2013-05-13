@@ -20,7 +20,7 @@
 
 -export([
    start/0, 
-   start_link/1, start_link/2, 
+   start_link/2, 
    local/1, global/1, i/1, 
    seq32/1
 ]).
@@ -32,12 +32,6 @@ start() ->
 
 %%
 %%
-start_link(Opts) ->
-   start_link(
-      proplists:get_value(uid, Opts, local),
-      proplists:lookup(seq, Opts)
-   ).
-
 start_link(local,  {seq, Uid}) ->
    uid_seq:start_link(local,  Uid);
 

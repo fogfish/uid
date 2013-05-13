@@ -43,8 +43,13 @@
 
 %%
 %%
-start_link(Mode, Name) ->
-   gen_server:start_link({local, Name}, ?MODULE, [Mode, Name], []).
+start_link(Mode, Name)
+ when is_atom(Name) ->
+   gen_server:start_link({local, Name}, ?MODULE, [Mode, Name], []);
+
+start_link(Mode, Name)
+ when is_list(Name) ->
+   gen_server:start_link(?MODULE, [Mode, Name], []).
 
 init([Mode, Name]) ->
    process_flag(trap_exit, true),
@@ -131,7 +136,10 @@ config(Key, Default) ->
 %%
 seq_file(Name)
  when is_atom(Name) ->
-   filename:join([config(seqdir, default_seq_dir()), atom_to_list(Name) ++ ".seq"]).
+   seq_file(atom_to_list(Name));
+seq_file(Name)
+ when is_list(Name) ->
+   filename:join([config(seqdir, default_seq_dir()), Name ++ ".seq"]).
 
 default_seq_dir() ->
    filename:join([config(seqdir, ?SEQDIR), atom_to_list(erlang:node())]).
