@@ -1,13 +1,8 @@
 {application, uid,
    [
-      {description, "unique identity service"},
-      {vsn,         "0.2.0"},
-      {modules,     [
-         uid,
-         uid_seq,
-         uid_sup,         
-         uid_app
-      ]},
+      {description, "k-ordered unique identity"},
+      {vsn,         "0.3.0"},
+      {modules,     []},
       {registered,  []},
       {applications,[
          kernel,

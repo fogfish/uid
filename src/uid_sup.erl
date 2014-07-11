@@ -17,11 +17,16 @@
 %%     unique identity
 -module(uid_sup).
 -behaviour(supervisor).
--author('Dmitry Kolesnikov <dmkolesnikov@gmail.com>').
 
 -export([
-   start_link/0, init/1
+   start_link/0
+  ,init/1
 ]).
+
+%%
+-define(CHILD(Type, I),            {I,  {I, start_link,   []}, permanent, 5000, Type, dynamic}).
+-define(CHILD(Type, I, Args),      {I,  {I, start_link, Args}, permanent, 5000, Type, dynamic}).
+-define(CHILD(Type, ID, I, Args),  {ID, {I, start_link, Args}, permanent, 5000, Type, dynamic}).
 
 %%
 %%
@@ -31,15 +36,8 @@ start_link() ->
 init(_) -> 
    {ok,
       {
-         {one_for_one, 2, 3600},  % 2 failure in hour
-         [local()]
+         {one_for_one, 2, 3600},
+         []
       }
-   }.
-
-local() ->
-   {
-      local,
-      {uid_local_sup, start_link, []},
-      permanent, 10000, supervisor, dynamic
    }.
 
