@@ -31,8 +31,7 @@
 -spec(l/1 :: (binary()) -> binary()).
 
 l() ->
-   {A, B, C} = erlang:now(),
-   <<A:24, B:20, C:20>>.
+   l(erlang:now()).
 
 l(<<X:8/binary, Node:16, _/binary>>=Global)
  when size(Global) =:= 16 -> 
@@ -41,7 +40,11 @@ l(<<X:8/binary, Node:16, _/binary>>=Global)
          X;
       _ ->
          exit(badarg)
-   end.
+   end;
+
+l({A, B, C}) ->
+   <<A:24, B:20, C:20>>.
+
 
 %%
 %% generate global 128-bit identity
