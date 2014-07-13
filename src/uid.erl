@@ -24,11 +24,16 @@
   ,g/1
 ]).
 
+-export_type([l/0, g/0]).
+-type(l()  ::  binary()).
+-type(g()  ::  binary()).
+-type(t()  ::  {integer(), integer(), integer()}).
+
 
 %%
 %% generate local 64-bit identity
--spec(l/0 :: () -> binary()).
--spec(l/1 :: (binary()) -> binary()).
+-spec(l/0 :: () -> l()).
+-spec(l/1 :: (g() | t()) -> l()).
 
 l() ->
    l(erlang:now()).
@@ -48,8 +53,8 @@ l({A, B, C}) ->
 
 %%
 %% generate global 128-bit identity
--spec(g/0 :: () -> binary()).
--spec(g/1 :: (binary()) -> binary()).
+-spec(g/0 :: () -> g()).
+-spec(g/1 :: (l()) -> g()).
 
 g() ->
    g(l()).
