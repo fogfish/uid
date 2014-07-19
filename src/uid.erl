@@ -22,6 +22,7 @@
   ,l/1
   ,g/0
   ,g/1
+  ,d/2
 ]).
 
 -export_type([l/0, g/0]).
@@ -29,6 +30,8 @@
 -type(g()  ::  binary()).
 -type(t()  ::  {integer(), integer(), integer()}).
 
+-define(is_l(X), is_binary(X), byte_size(X) =:=  8).
+-define(is_g(X), is_binary(X), byte_size(X) =:= 16).
 
 %%
 %% generate local 64-bit identity
@@ -39,7 +42,7 @@ l() ->
    l(erlang:now()).
 
 l(<<X:8/binary, Node:16, _/binary>>=Global)
- when size(Global) =:= 16 -> 
+ when ?is_g(Global) -> 
    case erlang:phash(erlang:node(), 1 bsl 16) of
       Node ->
          X;
@@ -60,10 +63,19 @@ g() ->
    g(l()).
 
 g(Local)
- when size(Local) =:= 8 ->
+ when ?is_l(Local) ->
    {ok,  Id} = application:get_env(uid, worker),
    Node = erlang:phash(erlang:node(), 1 bsl 16),
    <<Local/binary, Node:16, Id/binary>>.
 
+%%
+%% approximate distance between uid
+-spec(d/2 :: (l(), l()) -> integer()).
+
+d(X, Y)
+ when ?is_l(X), ?is_l(Y) ->
+   <<A:64>> = X,
+   <<B:64>> = Y,
+   A - B.
 
 
