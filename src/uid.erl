@@ -26,8 +26,8 @@
 ]).
 
 -export_type([l/0, g/0]).
--type(l()  ::  binary()).
--type(g()  ::  binary()).
+-type(l()  ::  {uid, binary()}).
+-type(g()  ::  {uid, binary()}).
 -type(t()  ::  {integer(), integer(), integer()}).
 
 -define(is_l(X), is_binary(X), byte_size(X) =:=  8).
@@ -41,17 +41,17 @@
 l() ->
    l(erlang:now()).
 
-l(<<X:8/binary, Node:16, _/binary>>=Global)
+l({uid, <<X:8/binary, Node:16, _/binary>>=Global})
  when ?is_g(Global) -> 
    case erlang:phash(erlang:node(), 1 bsl 16) of
       Node ->
-         X;
+         {uid, X};
       _ ->
          exit(badarg)
    end;
 
 l({A, B, C}) ->
-   <<A:24, B:20, C:20>>.
+   {uid, <<A:24, B:20, C:20>>}.
 
 
 %%
@@ -62,20 +62,25 @@ l({A, B, C}) ->
 g() ->
    g(l()).
 
-g(Local)
+g({uid, Local})
  when ?is_l(Local) ->
    {ok,  Id} = application:get_env(uid, worker),
    Node = erlang:phash(erlang:node(), 1 bsl 16),
-   <<Local/binary, Node:16, Id/binary>>.
+   {uid, <<Local/binary, Node:16, Id/binary>>};
+
+g({uid, Global}=X) 
+ when ?is_g(Global) ->
+   X.
 
 %%
 %% approximate distance between uid
 -spec(d/2 :: (l(), l()) -> integer()).
 
-d(X, Y)
+d({uid, X}, {uid, Y})
  when ?is_l(X), ?is_l(Y) ->
    <<A:64>> = X,
    <<B:64>> = Y,
    A - B.
+
 
 
