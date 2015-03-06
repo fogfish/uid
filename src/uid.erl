@@ -91,7 +91,14 @@ d({uid, X}, {uid, Y})
  when ?is_l(X), ?is_l(Y) ->
    <<A:64>> = X,
    <<B:64>> = Y,
+   A - B;
+
+d({uid, X}, {uid, Y})
+ when ?is_g(X), ?is_g(Y) ->
+   <<Prefix:8/binary, A:64>> = X,
+   <<Prefix:8/binary, B:64>> = Y,
    A - B.
+
 
 %%
 %% approximate k-order before given one 
@@ -103,7 +110,15 @@ before({uid, X})
    {C1, Q0} = sub(C0,  1, B0),
    {B1, Q1} = sub(Q0,  0, A0),
    {A1,  0} = sub(Q1,  0,  0),
-   l({A1, B1, C1}).
+   {uid, <<A1:24, B1:20, C1:20>>};
+
+before({uid, X})
+ when ?is_g(X) ->
+   <<Prefix:8/binary, A0:24, B0:20, C0:20>> = X,
+   {C1, Q0} = sub(C0,  1, B0),
+   {B1, Q1} = sub(Q0,  0, A0),
+   {A1,  0} = sub(Q1,  0,  0),
+   {uid, <<Prefix:8/binary, A1:24, B1:20, C1:20>>}.
 
 %%
 %% approximate k-order behind given one
@@ -115,8 +130,15 @@ behind({uid, X})
    {C1, Q0} = add(C0, 1,  0),
    {B1, Q1} = add(B0, 0, Q0),
    {A1,  _} = add(A0, 0, Q1),
-   l({A1, B1, C1}).
+   {uid, <<A1:24, B1:20, C1:20>>};
 
+behind({uid, X})
+ when ?is_g(X) ->
+   <<Prefix:8/binary, A0:24, B0:20, C0:20>> = X,
+   {C1, Q0} = add(C0, 1,  0),
+   {B1, Q1} = add(B0, 0, Q0),
+   {A1,  _} = add(A0, 0, Q1),
+   {uid, <<Prefix:8/binary, A1:24, B1:20, C1:20>>}.
 
 %%
 %% arithmetic with carry
