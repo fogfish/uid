@@ -22,7 +22,10 @@
   ,l/1
   ,g/0
   ,g/1
+  ,gtol/1
   ,d/2
+  ,before/1
+  ,behind/1
 ]).
 
 -export_type([l/0, g/0]).
@@ -32,7 +35,7 @@
 
 -define(is_l(X), is_binary(X), byte_size(X) =:=  8).
 -define(is_g(X), is_binary(X), byte_size(X) =:= 16).
-
+-define(BASE,    1000000).
 %%
 %% generate local 64-bit identity
 -spec(l/0 :: () -> l()).
@@ -41,7 +44,7 @@
 l() ->
    l(erlang:now()).
 
-l({uid, <<X:8/binary, Node:16, _/binary>>=Global})
+l({uid, <<_:6/binary, Node:16, X:8/binary>>=Global})
  when ?is_g(Global) -> 
    case erlang:phash(erlang:node(), 1 bsl 16) of
       Node ->
@@ -66,11 +69,19 @@ g({uid, Local})
  when ?is_l(Local) ->
    {ok,  Id} = application:get_env(uid, worker),
    Node = erlang:phash(erlang:node(), 1 bsl 16),
-   {uid, <<Local/binary, Node:16, Id/binary>>};
+   {uid, <<Id:6/binary, Node:16, Local/binary>>};
 
 g({uid, Global}=X) 
  when ?is_g(Global) ->
    X.
+
+%%
+%% cast global to local uid with force
+-spec(gtol/1 :: (g()) -> l()).
+
+gtol({uid, <<_:6/binary, _:16, X:8/binary>>=Global})
+ when ?is_g(Global) ->
+   {uid, X}.
 
 %%
 %% approximate distance between uid
@@ -82,5 +93,41 @@ d({uid, X}, {uid, Y})
    <<B:64>> = Y,
    A - B.
 
+%%
+%% approximate k-order before given one 
+-spec(before/1 :: (l()) -> l()).
 
+before({uid, X})
+ when ?is_l(X) ->
+   <<A0:24, B0:20, C0:20>> = X,
+   {C1, Q0} = sub(C0,  1, B0),
+   {B1, Q1} = sub(Q0,  0, A0),
+   {A1,  0} = sub(Q1,  0,  0),
+   l({A1, B1, C1}).
+
+%%
+%% approximate k-order behind given one
+-spec(behind/1 :: (l()) -> l()).
+
+behind({uid, X})
+ when ?is_l(X) ->
+   <<A0:24, B0:20, C0:20>> = X,
+   {C1, Q0} = add(C0, 1,  0),
+   {B1, Q1} = add(B0, 0, Q0),
+   {A1,  _} = add(A0, 0, Q1),
+   l({A1, B1, C1}).
+
+
+%%
+%% arithmetic with carry
+add(X, Y, Q) ->
+   T = X + Y + Q,
+   {T rem ?BASE, T div ?BASE}.   
+
+sub(X, Y, A)
+ when X >=Y ->
+   {X - Y, A};
+
+sub(X, Y, A) ->
+   {?BASE + X - Y, A - 1}.
 
