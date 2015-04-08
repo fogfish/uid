@@ -25,9 +25,13 @@
   ,gtol/1
   ,d/2
   ,before/1
+  ,before/2
   ,behind/1
+  ,behind/2
 ]).
 
+%%
+%% data types
 -export_type([l/0, g/0]).
 -type(l()  ::  {uid, binary()}).
 -type(g()  ::  {uid, binary()}).
@@ -36,8 +40,16 @@
 -define(is_l(X), is_binary(X), byte_size(X) =:=  8).
 -define(is_g(X), is_binary(X), byte_size(X) =:= 16).
 -define(BASE,    1000000).
+
+%%%----------------------------------------------------------------------------   
+%%%
+%%% unique identifier
+%%%
+%%%----------------------------------------------------------------------------   
+
 %%
-%% generate local 64-bit identity
+%% @doc
+%% generate locally unique 64-bit k-order identifier
 -spec(l/0 :: () -> l()).
 -spec(l/1 :: (g() | t()) -> l()).
 
@@ -56,9 +68,9 @@ l({uid, <<_:6/binary, Node:16, X:8/binary>>=Global})
 l({A, B, C}) ->
    {uid, <<A:24, B:20, C:20>>}.
 
-
 %%
-%% generate global 128-bit identity
+%% @doc
+%% generate globally unique 128-bit k-order identifier
 -spec(g/0 :: () -> g()).
 -spec(g/1 :: (l()) -> g()).
 
@@ -75,8 +87,16 @@ g({uid, Global}=X)
  when ?is_g(Global) ->
    X.
 
+%%%----------------------------------------------------------------------------   
+%%%
+%%% unique identifier utility
+%%%
+%%%----------------------------------------------------------------------------   
+
 %%
-%% cast global to local uid with force
+%% @doc
+%% cast with force global to local k-order identifier
+%% the operation do not guarantee uniqueness of the result
 -spec(gtol/1 :: (g()) -> l()).
 
 gtol({uid, <<_:6/binary, _:16, X:8/binary>>=Global})
@@ -84,7 +104,8 @@ gtol({uid, <<_:6/binary, _:16, X:8/binary>>=Global})
    {uid, X}.
 
 %%
-%% approximate distance between uid
+%% @doc
+%% approximate distance between identifiers
 -spec(d/2 :: (l(), l()) -> integer()).
 
 d({uid, X}, {uid, Y})
@@ -99,46 +120,63 @@ d({uid, X}, {uid, Y})
    <<Prefix:8/binary, B:64>> = Y,
    A - B.
 
-
 %%
-%% approximate k-order before given one 
+%% @doc
+%% approximate a new k-order in the distance before given one 
 -spec(before/1 :: (l()) -> l()).
+-spec(before/2 :: (l(), integer()) -> l()).
 
-before({uid, X})
+before(Uid) ->
+   before(Uid, 1).
+
+before({uid, X}, D)
  when ?is_l(X) ->
    <<A0:24, B0:20, C0:20>> = X,
-   {C1, Q0} = sub(C0,  1, B0),
-   {B1, Q1} = sub(Q0,  0, A0),
-   {A1,  0} = sub(Q1,  0,  0),
+   {A, B, C} = int(D),
+   {C1,  Q0} = sub(C0,  C, B0),
+   {B1,  Q1} = sub(Q0,  B, A0),
+   {A1,   0} = sub(Q1,  A,  0),
    {uid, <<A1:24, B1:20, C1:20>>};
 
-before({uid, X})
+before({uid, X}, I)
  when ?is_g(X) ->
    <<Prefix:8/binary, A0:24, B0:20, C0:20>> = X,
-   {C1, Q0} = sub(C0,  1, B0),
-   {B1, Q1} = sub(Q0,  0, A0),
-   {A1,  0} = sub(Q1,  0,  0),
+   {A, B, C} = int(I),
+   {C1,  Q0} = sub(C0,  C, B0),
+   {B1,  Q1} = sub(Q0,  B, A0),
+   {A1,   0} = sub(Q1,  A,  0),
    {uid, <<Prefix:8/binary, A1:24, B1:20, C1:20>>}.
 
 %%
-%% approximate k-order behind given one
+%% @doc
+%% approximate a new k-order in the distance behind given one 
 -spec(behind/1 :: (l()) -> l()).
+-spec(behind/2 :: (l(), integer()) -> l()).
 
-behind({uid, X})
+behind(Uid) ->
+   behind(Uid, 1).
+
+behind({uid, X}, I)
  when ?is_l(X) ->
    <<A0:24, B0:20, C0:20>> = X,
-   {C1, Q0} = add(C0, 1,  0),
+   {C1, Q0} = add(C0, I,  0),
    {B1, Q1} = add(B0, 0, Q0),
    {A1,  _} = add(A0, 0, Q1),
    {uid, <<A1:24, B1:20, C1:20>>};
 
-behind({uid, X})
+behind({uid, X}, I)
  when ?is_g(X) ->
    <<Prefix:8/binary, A0:24, B0:20, C0:20>> = X,
-   {C1, Q0} = add(C0, 1,  0),
+   {C1, Q0} = add(C0, I,  0),
    {B1, Q1} = add(B0, 0, Q0),
    {A1,  _} = add(A0, 0, Q1),
    {uid, <<Prefix:8/binary, A1:24, B1:20, C1:20>>}.
+
+%%%----------------------------------------------------------------------------   
+%%%
+%%% private
+%%%
+%%%----------------------------------------------------------------------------   
 
 %%
 %% arithmetic with carry
@@ -152,4 +190,16 @@ sub(X, Y, A)
 
 sub(X, Y, A) ->
    {?BASE + X - Y, A - 1}.
+
+%%
+%% split integer to triplet
+int(I)
+ when I < ?BASE ->
+   {0, 0, I};
+
+int(I) ->
+   C = I rem ?BASE,
+   B = (I div ?BASE) rem ?BASE,
+   A = (I div ?BASE) div ?BASE,
+   {A, B, C}.  
 
