@@ -31,7 +31,6 @@ start(_Type, _Args) ->
 stop(_State) ->
    ok.
 
-
 %%
 %%
 config_worker_id() ->

@@ -16,34 +16,46 @@
 %%  @description
 %%     k-ordered unique identity
 -module(uid).
+-include("uid.hrl").
 
+%% k-order interface
 -export([
    l/0
   ,l/1
   ,g/0
   ,g/1
-  ,gtol/1
+]).
+%% k-order utility
+-export([
+   gtol/1
   ,d/2
   ,before/1
   ,before/2
   ,behind/1
   ,behind/2
 ]).
+%% v-clock interface
+-export([
+   vclock/0,
+   vclock/1,
+   join/2,
+   descend/2,
+   descend/3,
+   diff/2
+]).
+
 
 %%
 %% data types
--export_type([l/0, g/0]).
--type(l()  ::  {uid, binary()}).
--type(g()  ::  {uid, binary()}).
--type(t()  ::  {integer(), integer(), integer()}).
-
--define(is_l(X), is_binary(X), byte_size(X) =:=  8).
--define(is_g(X), is_binary(X), byte_size(X) =:= 16).
--define(BASE,    1000000).
+-export_type([l/0, g/0, vclock/0]).
+-type(l()      ::  {uid, binary()}).
+-type(g()      ::  {uid, binary()}).
+-type(t()      ::  {integer(), integer(), integer()}).
+-type(vclock() ::  [{node(), l()}]).
 
 %%%----------------------------------------------------------------------------   
 %%%
-%%% unique identifier
+%%% k-order interface
 %%%
 %%%----------------------------------------------------------------------------   
 
@@ -53,20 +65,14 @@
 -spec(l/0 :: () -> l()).
 -spec(l/1 :: (g() | t()) -> l()).
 
-l() ->
-   l(erlang:now()).
+l() -> l(erlang:now()).
 
-l({uid, <<_:6/binary, Node:16, X:8/binary>>=Global})
- when ?is_g(Global) -> 
-   case erlang:phash(erlang:node(), 1 bsl 16) of
-      Node ->
-         {uid, X};
-      _ ->
-         exit(badarg)
-   end;
+l({A, B, C}) -> 
+   {uid, <<A:24, B:20, C:20>>};
 
-l({A, B, C}) ->
-   {uid, <<A:24, B:20, C:20>>}.
+l({uid, Uid}=Global)
+ when ?is_g(Uid) -> 
+   ?GUID:l(Global).
 
 %%
 %% @doc
@@ -79,9 +85,7 @@ g() ->
 
 g({uid, Local})
  when ?is_l(Local) ->
-   {ok,  Id} = application:get_env(uid, worker),
-   Node = erlang:phash(erlang:node(), 1 bsl 16),
-   {uid, <<Id:6/binary, Node:16, Local/binary>>};
+   ?GUID:g(Local);
 
 g({uid, Global}=X) 
  when ?is_g(Global) ->
@@ -89,7 +93,7 @@ g({uid, Global}=X)
 
 %%%----------------------------------------------------------------------------   
 %%%
-%%% unique identifier utility
+%%% k-order utility
 %%%
 %%%----------------------------------------------------------------------------   
 
@@ -99,9 +103,10 @@ g({uid, Global}=X)
 %% the operation do not guarantee uniqueness of the result
 -spec(gtol/1 :: (g()) -> l()).
 
-gtol({uid, <<_:6/binary, _:16, X:8/binary>>=Global})
- when ?is_g(Global) ->
-   {uid, X}.
+gtol({uid, Uid}=Global)
+ when ?is_g(Uid) ->
+   ?GUID:gtol(Global).
+
 
 %%
 %% @doc
@@ -116,9 +121,7 @@ d({uid, X}, {uid, Y})
 
 d({uid, X}, {uid, Y})
  when ?is_g(X), ?is_g(Y) ->
-   <<Prefix:8/binary, A:64>> = X,
-   <<Prefix:8/binary, B:64>> = Y,
-   A - B.
+   ?GUID:i(X) - ?GUID:i(Y).
 
 %%
 %% @doc
@@ -136,16 +139,7 @@ before({uid, X}, D)
    {C1,  Q0} = sub(C0,  C, B0),
    {B1,  Q1} = sub(Q0,  B, A0),
    {A1,   0} = sub(Q1,  A,  0),
-   {uid, <<A1:24, B1:20, C1:20>>};
-
-before({uid, X}, I)
- when ?is_g(X) ->
-   <<Prefix:8/binary, A0:24, B0:20, C0:20>> = X,
-   {A, B, C} = int(I),
-   {C1,  Q0} = sub(C0,  C, B0),
-   {B1,  Q1} = sub(Q0,  B, A0),
-   {A1,   0} = sub(Q1,  A,  0),
-   {uid, <<Prefix:8/binary, A1:24, B1:20, C1:20>>}.
+   {uid, <<A1:24, B1:20, C1:20>>}.
 
 %%
 %% @doc
@@ -162,15 +156,97 @@ behind({uid, X}, I)
    {C1, Q0} = add(C0, I,  0),
    {B1, Q1} = add(B0, 0, Q0),
    {A1,  _} = add(A0, 0, Q1),
-   {uid, <<A1:24, B1:20, C1:20>>};
+   {uid, <<A1:24, B1:20, C1:20>>}.
 
-behind({uid, X}, I)
- when ?is_g(X) ->
-   <<Prefix:8/binary, A0:24, B0:20, C0:20>> = X,
-   {C1, Q0} = add(C0, I,  0),
-   {B1, Q1} = add(B0, 0, Q0),
-   {A1,  _} = add(A0, 0, Q1),
-   {uid, <<Prefix:8/binary, A1:24, B1:20, C1:20>>}.
+%%%----------------------------------------------------------------------------   
+%%%
+%%% v-clock interface
+%%%
+%%%----------------------------------------------------------------------------   
+
+%%
+%% create new v-clock
+-spec(vclock/0 :: () -> vclock()).
+
+vclock() ->
+   [{erlang:node(), l()}].
+
+%%
+%% increment v-clock
+-spec(vclock/1 :: (vclock()) -> vclock()).
+
+vclock(Vclock) ->
+   Node = erlang:node(),
+   case lists:keytake(Vclock, 1, Vclock) of
+      false ->
+         [{Node, l()} | Vclock];
+      {value, _, List} ->
+         [{Node, l()} | List]
+   end.
+
+%%
+%% join two v-clock
+-spec(join/2 :: (vclock(), vclock()) -> vclock()). 
+
+join(A, B) ->
+   do_join(lists:keysort(1, A), lists:keysort(1, B)).
+
+do_join([{NodeA, X}|A], [{NodeB, _}|_]=B)
+ when NodeA < NodeB ->
+   [{NodeA, X} | do_join(A, B)];
+
+do_join([{NodeA, _}|_]=A, [{NodeB, X}|B])
+ when NodeA > NodeB ->
+   [{NodeB, X} | do_join(A, B)];
+
+do_join([{Node, X}|A], [{Node, Y}|B]) ->
+   [{Node, erlang:max(X, Y)} | do_join(A, B)];
+
+do_join([], B) ->
+   B;
+
+do_join(A, []) ->
+   A.
+
+%%
+%% return true if A v-clock is descend of B v-clock : A -> B 
+-spec(descend/2 :: (vclock(), vclock()) -> boolean()).
+
+descend(_, []) ->
+   true;
+descend(A, [{Node, X}|B]) ->
+   case lists:keyfind(Node, 1, A) of
+      false ->
+         (X =< 0) andalso descend(A, B);
+      {_, Y}  ->
+         (X =< Y) andalso descend(A, B)
+   end.
+
+%%
+%% return true if A clock is descend B with an exception to given peer 
+%% the method allows to discover local conflicts
+-spec(descend/3 :: (node(), vclock(), vclock()) -> boolean()).
+
+descend(Node, A, B) ->
+   descend(lists:keydelete(Node, 1, A), lists:keydelete(Node, 1, B)).
+
+%%
+%% return difference of A clock to compare with B 
+-spec(diff/2 :: (vclock(), vclock()) -> [node()]).
+
+diff(_, []) ->
+   [];
+diff(A, [{Node, X}|B]) ->
+   case lists:keyfind(Node, 1, A) of
+      false ->
+         [{Node, X} | diff(A, B)];
+      {_, Y} when X =< Y  ->
+         diff(A, B);
+      {_, Y} ->
+         [{Node, d(X, Y)} | diff(A, B)]
+   end.
+
+
 
 %%%----------------------------------------------------------------------------   
 %%%

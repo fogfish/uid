@@ -18,6 +18,18 @@ Client applications benefits from short 64-bit identity using it locally and dyn
 
    ```
 
+## 96-bit
+
+   ```
+         32bit                  24bit          20bit           20bit             
+   |----------------------|--------------|--------------|--------------|
+         Node                     A               B             C    
+   
+   Node = erlang:phash(erlang:node(), 1 bsl 32). 
+
+   ```
+
+
 ## 128-bit
 
    ```
