@@ -177,7 +177,7 @@ vclock() ->
 
 vclock(Vclock) ->
    Node = erlang:node(),
-   case lists:keytake(Vclock, 1, Vclock) of
+   case lists:keytake(Node, 1, Vclock) of
       false ->
          [{Node, l()} | Vclock];
       {value, _, List} ->
