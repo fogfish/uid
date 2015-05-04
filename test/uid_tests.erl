@@ -16,12 +16,33 @@
 -module(uid_tests).
 -include_lib("eunit/include/eunit.hrl").
 
-
+%%
+%%
 l_test() ->
    {uid, _} = uid:l().
 
+%%
+%%
 g_test() ->
    L = uid:l(),
    L = uid:l(uid:g(L)),
    L = uid:gtol(uid:g(L)).
+
+%%
+%%         --> D --
+vclock_test() ->
+   A = uid:vclock(),
+   B = uid:vclock(A),
+   C = [{a, uid:l()} | B],
+   D = [{b ,uid:l()} | B],
+   E = uid:join(C, D),
+   false = uid:descend(A, B),
+   true  = uid:descend(B, A),
+   true  = uid:descend(C, B),   
+   true  = uid:descend(D, B),
+   false = uid:descend(C, D),   
+   false = uid:descend(D, C),
+   true  = uid:descend(E, C),   
+   true  = uid:descend(E, D).   
+
 
