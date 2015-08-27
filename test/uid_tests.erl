@@ -16,33 +16,73 @@
 -module(uid_tests).
 -include_lib("eunit/include/eunit.hrl").
 
-%%
-%%
-l_test() ->
-   {uid, _} = uid:l().
+uid_test_() ->
+   {foreach,
+      fun init/0,
+      fun free/1,
+      [
+         fun l/1,
+         fun g/1,
+         fun d/1,
+         fun vclock/1
+      ]
+   }.
+
+init() ->
+   application:start(uid).
+
+free(_) ->
+   ok.
 
 %%
 %%
-g_test() ->
+l(_) ->
+   [
+      ?_assertMatch({uid, _}, uid:l())
+   ].
+
+%%
+%%
+g(_) ->
    L = uid:l(),
-   L = uid:l(uid:g(L)),
-   L = uid:gtol(uid:g(L)).
+   [
+      ?_assertMatch({uid, _, _}, uid:g()),
+      ?_assertMatch(L, uid:l(uid:g(L))),
+      ?_assertMatch(L, uid:gtol(uid:g(L)))
+   ].
 
 %%
-%%         --> D --
-vclock_test() ->
+%%
+d(_) ->
+   [
+      ?_assertMatch({uid, _}, uid:d(uid:l(), uid:l())),
+      ?_assertMatch({uid, _, _}, uid:d(uid:g(), uid:g()))
+   ].
+
+
+%%
+%% 
+vclock(_) ->
    A = uid:vclock(),
    B = uid:vclock(A),
-   C = [{a, uid:l()} | B],
-   D = [{b ,uid:l()} | B],
+   C = [vtime('a@127.0.0.1') | B],
+   D = [vtime('b@127.0.0.1') | B],
    E = uid:join(C, D),
-   false = uid:descend(A, B),
-   true  = uid:descend(B, A),
-   true  = uid:descend(C, B),   
-   true  = uid:descend(D, B),
-   false = uid:descend(C, D),   
-   false = uid:descend(D, C),
-   true  = uid:descend(E, C),   
-   true  = uid:descend(E, D).   
+   [
+      ?_assertMatch(false, uid:descend(A, B)),
+      ?_assertMatch(true,  uid:descend(B, A)),
+      ?_assertMatch(true,  uid:descend(C, B)),   
+      ?_assertMatch(true,  uid:descend(D, B)),
+      ?_assertMatch(false, uid:descend(C, D)),   
+      ?_assertMatch(false, uid:descend(D, C)),
+      ?_assertMatch(true,  uid:descend(E, C)),   
+      ?_assertMatch(true,  uid:descend(E, D))   
+   ].
+
+vtime(Node) ->
+   {uid, Uid} = uid:l(),
+   {uid, Node, Uid}.
+
+
 
 

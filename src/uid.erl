@@ -24,15 +24,14 @@
   ,l/1
   ,g/0
   ,g/1
+  ,encode/1
+  ,decode/1
 ]).
 %% k-order utility
 -export([
    gtol/1
   ,d/2
-  ,before/1
-  ,before/2
-  ,behind/1
-  ,behind/2
+  ,t/1
 ]).
 %% v-clock interface
 -export([
@@ -44,14 +43,16 @@
    diff/2
 ]).
 
-
 %%
 %% data types
 -export_type([l/0, g/0, vclock/0]).
 -type(l()      ::  {uid, binary()}).
--type(g()      ::  {uid, binary()}).
+-type(g()      ::  {uid, binary(), binary()}).
+-type(k()      ::  {uid, node(), t(), id(), seq()}).
 -type(t()      ::  {integer(), integer(), integer()}).
--type(vclock() ::  [{node(), l()}]).
+-type(id()     ::  integer()).
+-type(seq()    ::  integer()).
+-type(vclock() ::  [g()]).
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -62,17 +63,30 @@
 %%
 %% @doc
 %% generate locally unique 64-bit k-order identifier
--spec(l/0 :: () -> l()).
--spec(l/1 :: (g() | t()) -> l()).
+-spec(l/0 :: ()    -> l()).
+-spec(l/1 :: (g()) -> l()).
 
-l() -> l(erlang:now()).
+l() -> 
+   #uid{t = {A, B, C}, id = Id, seq = Seq} = k(),
+   {uid, <<A:20, B:20, C:10, Id:4, Seq:10>>}.
 
-l({A, B, C}) -> 
-   {uid, <<A:24, B:20, C:20>>};
+l({uid, Node, Uid})
+ when is_binary(Node) ->
+   case ?CONFIG_UID:node() of
+      Node ->
+         {uid, Uid};
+      _    ->
+         exit(badarg)
+   end;
 
-l({uid, Uid}=Global)
- when ?is_g(Uid) -> 
-   ?GUID:l(Global).
+l({uid, Node, Uid})
+ when is_atom(Node) ->
+   case erlang:node() of
+      Node ->
+         {uid, Uid};
+      _    ->
+         exit(badarg)
+   end.
 
 %%
 %% @doc
@@ -83,13 +97,50 @@ l({uid, Uid}=Global)
 g() ->
    g(l()).
 
-g({uid, Local})
- when ?is_l(Local) ->
-   ?GUID:g(Local);
+g({uid, Uid}) ->
+   {uid, erlang:node(), Uid};
 
-g({uid, Global}=X) 
- when ?is_g(Global) ->
-   X.
+g({uid, _, _} = Uid) ->
+   Uid.
+
+%%
+%% @doc
+%% encode k-order number to binary format
+-spec(encode/1 :: (l() | g()) -> binary()).
+
+encode({uid, Uid}) ->
+   Uid;
+encode({uid, Node, Uid})
+ when Node =:= erlang:node() ->
+   <<(?CONFIG_UID:node())/binary, Uid/binary>>;
+encode({uid, Node, Uid})
+ when is_binary(Node) ->
+   <<Node/binary, Uid/binary>>.
+
+%%
+%% @doc
+%% decode k-order number from binary format
+-spec(decode/1 :: (binary()) -> l() | g()).
+
+decode(Uid)
+ when byte_size(Uid) =:= 8 ->
+   {uid, Uid};
+decode(<<Node:4/binary, Uid:8/binary>>) ->
+   case ?CONFIG_UID:node() of
+      Node ->
+         {uid, erlang:node(), Uid};
+      _    ->
+         {uid, Node, Uid}
+   end;
+
+decode(<<Node:8/binary, Uid:8/binary>>) ->
+   case ?CONFIG_UID:node() of
+      Node ->
+         {uid, erlang:node(), Uid};
+      _    ->
+         {uid, Node, Uid}
+   end.
+
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -103,60 +154,34 @@ g({uid, Global}=X)
 %% the operation do not guarantee uniqueness of the result
 -spec(gtol/1 :: (g()) -> l()).
 
-gtol({uid, Uid}=Global)
- when ?is_g(Uid) ->
-   ?GUID:gtol(Global).
-
+gtol({uid, _Node, Uid}) ->
+   {uid, Uid}.
 
 %%
 %% @doc
-%% approximate distance between identifiers
--spec(d/2 :: (l(), l()) -> integer()).
+%% approximate distance between k-order values
+-spec(d/2 :: (l() | g(), l() | g()) -> k()).
 
-d({uid, X}, {uid, Y})
- when ?is_l(X), ?is_l(Y) ->
-   <<A:64>> = X,
-   <<B:64>> = Y,
-   A - B;
+d({uid, A}, {uid, B}) ->
+   {uid, d(A, B)}; 
 
-d({uid, X}, {uid, Y})
- when ?is_g(X), ?is_g(Y) ->
-   ?GUID:i(X) - ?GUID:i(Y).
+d({uid, Node, A}, {uid, Node, B}) ->
+   {uid, Node, d(A, B)};
 
-%%
-%% @doc
-%% approximate a new k-order in the distance before given one 
--spec(before/1 :: (l()) -> l()).
--spec(before/2 :: (l(), integer()) -> l()).
-
-before(Uid) ->
-   before(Uid, 1).
-
-before({uid, X}, D)
- when ?is_l(X) ->
-   <<A0:24, B0:20, C0:20>> = X,
-   {A, B, C} = int(D),
-   {C1,  Q0} = sub(C0,  C, B0),
-   {B1,  Q1} = sub(Q0,  B, A0),
-   {A1,   0} = sub(Q1,  A,  0),
-   {uid, <<A1:24, B1:20, C1:20>>}.
+d(<<A2:20, A1:20, A0:10, As:14>>, <<B2:20, B1:20, B0:10, Bs:14>>) ->
+   A = {A2, A1, A0 * 1000},
+   B = {B2, B1, B0 * 1000},
+   <<(timer:now_diff(A,B) div 1000):50, (As - Bs):14>>.
 
 %%
 %% @doc
-%% approximate a new k-order in the distance behind given one 
--spec(behind/1 :: (l()) -> l()).
--spec(behind/2 :: (l(), integer()) -> l()).
+%% helper function to extract time-stamp in milliseconds from k-order value
+-spec(t/1 :: (l() | g()) -> integer()).
 
-behind(Uid) ->
-   behind(Uid, 1).
-
-behind({uid, X}, I)
- when ?is_l(X) ->
-   <<A0:24, B0:20, C0:20>> = X,
-   {C1, Q0} = add(C0, I,  0),
-   {B1, Q1} = add(B0, 0, Q0),
-   {A1,  _} = add(A0, 0, Q1),
-   {uid, <<A1:24, B1:20, C1:20>>}.
+t({uid, <<T:50, _:14>>}) ->
+   T;
+t({uid, _, <<T:50, _:14>>}) ->
+   T.
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -169,19 +194,18 @@ behind({uid, X}, I)
 -spec(vclock/0 :: () -> vclock()).
 
 vclock() ->
-   [{erlang:node(), l()}].
+   [g()].
 
 %%
 %% increment v-clock
 -spec(vclock/1 :: (vclock()) -> vclock()).
 
 vclock(Vclock) ->
-   Node = erlang:node(),
-   case lists:keytake(Node, 1, Vclock) of
+   case lists:keytake(?CONFIG_UID:node(), 2, Vclock) of
       false ->
-         [{Node, l()} | Vclock];
+         [g() | Vclock];
       {value, _, List} ->
-         [{Node, l()} | List]
+         [g() | List]
    end.
 
 %%
@@ -189,18 +213,18 @@ vclock(Vclock) ->
 -spec(join/2 :: (vclock(), vclock()) -> vclock()). 
 
 join(A, B) ->
-   do_join(lists:keysort(1, A), lists:keysort(1, B)).
+   do_join(lists:keysort(2, A), lists:keysort(2, B)).
 
-do_join([{NodeA, X}|A], [{NodeB, _}|_]=B)
+do_join([{uid, NodeA, _}=X|A], [{uid, NodeB, _}|_]=B)
  when NodeA < NodeB ->
-   [{NodeA, X} | do_join(A, B)];
+   [X | do_join(A, B)];
 
-do_join([{NodeA, _}|_]=A, [{NodeB, X}|B])
+do_join([{uid, NodeA, _}|_]=A, [{uid, NodeB, _}=X|B])
  when NodeA > NodeB ->
-   [{NodeB, X} | do_join(A, B)];
+   [X | do_join(A, B)];
 
-do_join([{Node, X}|A], [{Node, Y}|B]) ->
-   [{Node, erlang:max(X, Y)} | do_join(A, B)];
+do_join([X|A], [Y|B]) ->
+   [erlang:max(X, Y) | do_join(A, B)];
 
 do_join([], B) ->
    B;
@@ -214,21 +238,24 @@ do_join(A, []) ->
 
 descend(_, []) ->
    true;
-descend(A, [{Node, X}|B]) ->
-   case lists:keyfind(Node, 1, A) of
+descend(A, [{uid, Node, _} = X|B]) ->
+   case lists:keyfind(Node, 2, A) of
       false ->
-         (X =< 0) andalso descend(A, B);
-      {_, Y}  ->
+         false;
+      Y  ->
          (X =< Y) andalso descend(A, B)
    end.
 
 %%
 %% return true if A clock is descend B with an exception to given peer 
 %% the method allows to discover local conflicts
+%%
+%% Note: requires 96bit configuration schema
 -spec(descend/3 :: (node(), vclock(), vclock()) -> boolean()).
 
-descend(Node, A, B) ->
-   descend(lists:keydelete(Node, 1, A), lists:keydelete(Node, 1, B)).
+descend(Node, A, B)
+ when is_atom(Node) ->
+   descend(lists:keydelete(Node, 2, A), lists:keydelete(Node, 2, B)).
 
 %%
 %% return difference of A clock to compare with B 
@@ -236,17 +263,15 @@ descend(Node, A, B) ->
 
 diff(_, []) ->
    [];
-diff(A, [{Node, X}|B]) ->
-   case lists:keyfind(Node, 1, A) of
+diff(A, [{uid, Node, _} = X|B]) ->
+   case lists:keyfind(Node, 2, A) of
       false ->
-         [{Node, X} | diff(A, B)];
-      {_, Y} when X =< Y  ->
+         [X | diff(A, B)];
+      Y when X =< Y  ->
          diff(A, B);
-      {_, Y} ->
-         [{Node, d(X, Y)} | diff(A, B)]
+      Y ->
+         [d(X, Y) | diff(A, B)]
    end.
-
-
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -255,27 +280,21 @@ diff(A, [{Node, X}|B]) ->
 %%%----------------------------------------------------------------------------   
 
 %%
-%% arithmetic with carry
-add(X, Y, Q) ->
-   T = X + Y + Q,
-   {T rem ?BASE, T div ?BASE}.   
+%% @doc
+%% generate unique k-order identifier
+-spec(k/0 :: () -> k()).
 
-sub(X, Y, A)
- when X >=Y ->
-   {X - Y, A};
-
-sub(X, Y, A) ->
-   {?BASE + X - Y, A - 1}.
+k() ->
+   gen_server:call(whereis(), seq, infinity).
 
 %%
-%% split integer to triplet
-int(I)
- when I < ?BASE ->
-   {0, 0, I};
-
-int(I) ->
-   C = I rem ?BASE,
-   B = (I div ?BASE) rem ?BASE,
-   A = (I div ?BASE) div ?BASE,
-   {A, B, C}.  
-
+%% where is sequence
+whereis() ->
+   case erlang:get(uid_seq) of
+      undefined ->
+         Pid = gen_server:call(uid_master, pid, infinity),
+         erlang:put(uid_seq, Pid),
+         Pid;
+      Pid when is_pid(Pid) ->
+         Pid
+   end.

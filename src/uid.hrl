@@ -1,26 +1,15 @@
 
-%%
-%% global uid 96 bit
--ifndef(CONFIG_UID_96BIT).
--define(CONFIG_UID_96BIT,   true).
--endif.
+%% max number of parallel sequences
+-define(SEQ,         16).
+
+%% max sequence value
+-define(SEQ_MAX,   1023).
 
 %%
-%% global uid 128 bit
-%% -ifndef(CONFIG_UID_128BIT).
-%% -define(CONFIG_UID_128BIT,  true).
-%% -endif.
-
--ifdef(CONFIG_UID_96BIT).
--define(GUID,     uid_96).
--define(is_l(X), is_binary(X), byte_size(X) =:=  8).
--define(is_g(X), is_binary(X), byte_size(X) =:= 12).
--endif.
-
--ifdef(CONFIG_UID_128BIT).
--define(GUID,     uid_128).
--define(is_l(X), is_binary(X), byte_size(X) =:=  8).
--define(is_g(X), is_binary(X), byte_size(X) =:= 16).
--endif.
-
--define(BASE,    1000000).
+%% internal sequence state
+-record(uid, {
+   node = undefined :: node()
+  ,t    = undefined :: any()
+  ,id   = undefined :: any()
+  ,seq  = undefined :: any()
+}).

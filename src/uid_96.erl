@@ -17,36 +17,10 @@
 %%     k-ordered unique global identity 96bit
 -module(uid_96).
 
--export([
-   l/1,
-   g/1,
-   gtol/1,
-   i/1
-]).
+-export([node/0]).
 
 %%
 %%
-l({uid, <<Node:32, X:8/binary>>}) ->
-   case erlang:phash(erlang:node(), 1 bsl 32) of
-      Node ->
-         {uid, X};
-      _ ->
-         exit(badarg)
-   end.
-
-%%
-%%
-g(Local) ->
+node() ->
    Node = erlang:phash(erlang:node(), 1 bsl 32),
-   {uid, <<Node:32, Local/binary>>}.
-
-%%
-%%
-gtol({uid, <<_:32, X:8/binary>>}) ->
-   {uid, X}.
-
-
-%%
-%%
-i({uid, <<_:32, X:64>>}) ->
-   X.
+   <<Node:32>>.

@@ -18,6 +18,8 @@
 -module(uid_sup).
 -behaviour(supervisor).
 
+-include("uid.hrl").
+
 -export([
    start_link/0
   ,init/1
@@ -36,8 +38,11 @@ start_link() ->
 init(_) -> 
    {ok,
       {
-         {one_for_one, 2, 3600},
-         []
+         {one_for_all, 2, 3600},
+         [
+            ?CHILD(supervisor, uid_seq_sup)
+           ,?CHILD(worker,     uid_master)
+         ]
       }
    }.
 

@@ -14,12 +14,32 @@
 %%   limitations under the License.
 %%
 %%  @description
-%%     k-ordered unique global identity 96bit
--module(uid_128).
+%%     unique identity
+-module(uid_seq_sup).
+-behaviour(supervisor).
 
--export([node/0]).
+-include("uid.hrl").
 
-node() ->
-   {ok,  Id} = application:get_env(uid, worker),
-   Node = erlang:phash(erlang:node(), 1 bsl 16),
-   <<Id:6/binary, Node:16>>.
+-export([
+   start_link/0
+  ,init/1
+]).
+
+%%
+-define(CHILD(Type, I),            {I,  {I, start_link,   []}, permanent, 5000, Type, dynamic}).
+-define(CHILD(Type, I, Args),      {I,  {I, start_link, Args}, permanent, 5000, Type, dynamic}).
+-define(CHILD(Type, ID, I, Args),  {ID, {I, start_link, Args}, permanent, 5000, Type, dynamic}).
+
+%%
+%%
+start_link() ->
+   supervisor:start_link({local, ?MODULE}, ?MODULE, []).
+   
+init(_) -> 
+   {ok,
+      {
+         {one_for_one, 2, 3600},
+         [?CHILD(worker, X, uid_seq, [X]) || X <- lists:seq(1, ?SEQ)]
+      }
+   }.
+
