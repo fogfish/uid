@@ -32,6 +32,7 @@
    gtol/1
   ,d/2
   ,t/1
+  ,bind/1
 ]).
 %% v-clock interface
 -export([
@@ -182,6 +183,24 @@ t({uid, <<T:50, _:14>>}) ->
    T;
 t({uid, _, <<T:50, _:14>>}) ->
    T.
+
+%%
+%% @doc
+%% bind process with sequence
+-spec(bind/1 :: (any()) -> ok).
+
+bind(Id)
+ when is_integer(Id) ->
+   I = case Id rem ?SEQ of
+      0 -> ?SEQ;
+      X -> X
+   end,
+   {_, Pid, _, _} = lists:keyfind(I, 1, supervisor:which_children(uid_seq_sup)),
+   erlang:put(uid_seq, Pid),
+   ok;
+
+bind(<<Id:4, _/bits>>) ->
+   bind(Id).
 
 %%%----------------------------------------------------------------------------   
 %%%
