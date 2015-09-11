@@ -220,7 +220,7 @@ vclock() ->
 -spec(vclock/1 :: (vclock()) -> vclock()).
 
 vclock(Vclock) ->
-   case lists:keytake(?CONFIG_UID:node(), 2, Vclock) of
+   case lists:keytake(erlang:node(), 2, Vclock) of
       false ->
          [g() | Vclock];
       {value, _, List} ->
