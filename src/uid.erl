@@ -268,8 +268,6 @@ descend(A, [{uid, Node, _} = X|B]) ->
 %%
 %% return true if A clock is descend B with an exception to given peer 
 %% the method allows to discover local conflicts
-%%
-%% Note: requires 96bit configuration schema
 -spec(descend/3 :: (node(), vclock(), vclock()) -> boolean()).
 
 descend(Node, A, B)
