@@ -68,8 +68,8 @@
 -spec(l/1 :: (g()) -> l()).
 
 l() -> 
-   #uid{t = {A, B, C}, id = Id, seq = Seq} = k(),
-   {uid, <<A:20, B:20, C:10, Id:4, Seq:10>>}.
+   {uid, k()}.
+
 
 l({uid, Node, Uid})
  when is_binary(Node) ->
@@ -109,37 +109,36 @@ g({uid, _, _} = Uid) ->
 %% encode k-order number to binary format
 -spec(encode/1 :: (l() | g()) -> binary()).
 
-encode({uid, Uid}) ->
-   Uid;
-encode({uid, Node, Uid})
+encode({uid, {A, B, C, Seq}}) ->
+   <<A:20, B:20, C:10, Seq:14>>;
+encode({uid, Node, {A, B, C, Seq}})
  when Node =:= erlang:node() ->
-   <<(?CONFIG_UID:node())/binary, Uid/binary>>;
-encode({uid, Node, Uid})
+   <<(?CONFIG_UID:node())/binary, A:20, B:20, C:10, Seq:14>>;
+encode({uid, Node, {A, B, C, Seq}})
  when is_binary(Node) ->
-   <<Node/binary, Uid/binary>>.
+   <<Node/binary, A:20, B:20, C:10, Seq:14>>.
 
 %%
 %% @doc
 %% decode k-order number from binary format
 -spec(decode/1 :: (binary()) -> l() | g()).
 
-decode(Uid)
- when byte_size(Uid) =:= 8 ->
-   {uid, Uid};
-decode(<<Node:4/binary, Uid:8/binary>>) ->
+decode(<<A:20, B:20, C:10, Seq:14>>) ->
+   {uid, {A, B, C, Seq}};
+decode(<<Node:4/binary, A:20, B:20, C:10, Seq:14>>) ->
    case ?CONFIG_UID:node() of
       Node ->
-         {uid, erlang:node(), Uid};
+         {uid, erlang:node(), {A, B, C, Seq}};
       _    ->
-         {uid, Node, Uid}
+         {uid, Node, {A, B, C, Seq}}
    end;
 
-decode(<<Node:8/binary, Uid:8/binary>>) ->
+decode(<<Node:8/binary, A:20, B:20, C:10, Seq:14>>) ->
    case ?CONFIG_UID:node() of
       Node ->
-         {uid, erlang:node(), Uid};
+         {uid, erlang:node(), {A, B, C, Seq}};
       _    ->
-         {uid, Node, Uid}
+         {uid, Node, {A, B, C, Seq}}
    end.
 
 
@@ -169,26 +168,30 @@ d({uid, A}, {uid, B}) ->
 d({uid, Node, A}, {uid, Node, B}) ->
    {uid, Node, d(A, B)};
 
-d(<<A2:20, A1:20, A0:10, As:14>>, <<B2:20, B1:20, B0:10, Bs:14>>) ->
-   A = {A2, A1, A0 * 1000},
-   B = {B2, B1, B0 * 1000},
-   <<(timer:now_diff(A,B) div 1000):50, (As - Bs):14>>.
+d({A2, A1, A0, As}, {B2, B1, B0, Bs}) ->
+   X = timer:now_diff({A2, A1, A0}, {B2, B1, B0}),
+   C = X rem ?BASE,
+   Y = X div ?BASE,
+   B = Y rem ?BASE,
+   A = Y div ?BASE,
+   {A, B, C, As - Bs}.
 
 %%
 %% @doc
 %% helper function to extract time-stamp in milliseconds from k-order value
 -spec(t/1 :: (l() | g()) -> integer()).
 
-t({uid, <<T:50, _:14>>}) ->
-   T;
-t({uid, _, <<T:50, _:14>>}) ->
-   T.
+t({uid, {A, B, C, _}}) ->
+   (A * ?BASE + B) * 1000 + C div 1000;
+t({uid, _, {A, B, C, _}}) ->
+   (A * ?BASE + B) * 1000 + C div 1000.
 
 %%
 %% @doc
 %% bind process with sequence
 -spec(bind/1 :: (any()) -> ok).
 
+-ifndef(CONFIG_NATIVE).
 bind(Id)
  when is_integer(Id) ->
    I = case Id rem ?SEQ of
@@ -201,6 +204,10 @@ bind(Id)
 
 bind(<<Id:4, _/bits>>) ->
    bind(Id).
+-else.
+bind(_) ->
+   ok.
+-endif.
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -301,11 +308,24 @@ diff(A, [{uid, Node, _} = X|B]) ->
 %% generate unique k-order identifier
 -spec(k/0 :: () -> k()).
 
+-ifndef(CONFIG_NATIVE).
 k() ->
-   gen_server:call(whereis(), seq, infinity).
+   #uid{t = {A, B, C}, id = Id, seq = Seq} = gen_server:call(whereis(), seq, infinity),
+   % <<A:20, B:20, C:10, Id:4, Seq:10>>
+   {A, B, C, (Id bsl 10) + Seq}.
+
+-else.
+k() ->
+   {A, B, C} = os:timestamp(),
+   Seq = erlang:unique_integer([monotonic]) rem 16384,
+   % <<A:20, B:20, C:10, Seq:14>>
+   {A, B, C, Seq}.
+-endif.
+
 
 %%
 %% where is sequence
+-ifndef(CONFIG_NATIVE).
 whereis() ->
    case erlang:get(uid_seq) of
       undefined ->
@@ -315,3 +335,4 @@ whereis() ->
       Pid when is_pid(Pid) ->
          Pid
    end.
+-endif.

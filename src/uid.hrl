@@ -13,3 +13,5 @@
   ,id   = undefined :: any()
   ,seq  = undefined :: any()
 }).
+
+-define(BASE,          1000000).

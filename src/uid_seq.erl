@@ -90,10 +90,7 @@ seq({A, B, C}, #uid{t = {A, B, C}, seq = ?SEQ_MAX} = State) ->
 
 seq({A, B, C}, #uid{t = {A, B, C}, seq = Seq} = State) ->
    State#uid{seq = Seq + 1};
-   % {State#uid{t = {A, B, C}, seq = Seq + 1},};
 
 seq(T, #uid{} = State) ->
    State#uid{t = T, seq = 0}.
-
-   % {State#uid{t = {A, B, C}, seq = 0}, State#uid{t = T, seq = 0}}.
 

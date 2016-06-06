@@ -6,7 +6,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(N,        4).
--define(LOOP,     1 *  100 * 1000).
+-define(LOOP,     1 * 1000 * 1000).
 -define(TIMEOUT, 60 * 1000).
 
 %%
@@ -27,7 +27,7 @@ run() ->
 
 exec(N, Hashmap) ->
    Self = self(),
-   Pids = [spawn_link(fun() -> loop(Self, Id, Hashmap, ?LOOP) end) || Id <- lists:seq(1, N)],
+   Pids = [spawn_link(fun() -> loop(Self, uid:bind(Id), Hashmap, ?LOOP) end) || Id <- lists:seq(1, N)],
    fold(Pids).
 
 fold([]) -> ok;
@@ -41,7 +41,7 @@ fold([Pid | Pids]) ->
 loop(Pid, _Id, _Hashmap, 0) ->
    Pid ! {ok, self()};
 loop(Pid,  Id,  Hashmap, N) ->
-   Uid = uid:l(),
+   _Uid = uid:l(),
    % case ets:insert_new(Hashmap, {Uid, 1}) of
    %    true  ->
    %       ok;
