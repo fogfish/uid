@@ -38,7 +38,7 @@ free(_) ->
 %%
 l(_) ->
    [
-      ?_assertMatch({uid, _}, uid:l())
+      ?_assertMatch({uid, _, _}, uid:l())
    ].
 
 %%
@@ -46,7 +46,7 @@ l(_) ->
 g(_) ->
    L = uid:l(),
    [
-      ?_assertMatch({uid, _, _}, uid:g()),
+      ?_assertMatch({uid, _, _, _}, uid:g()),
       ?_assertMatch(L, uid:l(uid:g(L))),
       ?_assertMatch(L, uid:gtol(uid:g(L)))
    ].
@@ -55,8 +55,8 @@ g(_) ->
 %%
 d(_) ->
    [
-      ?_assertMatch({uid, _}, uid:d(uid:l(), uid:l())),
-      ?_assertMatch({uid, _, _}, uid:d(uid:g(), uid:g()))
+      ?_assertMatch({uid, _, _}, uid:d(uid:l(), uid:l())),
+      ?_assertMatch({uid, _, _, _}, uid:d(uid:g(), uid:g()))
    ].
 
 
@@ -80,8 +80,8 @@ vclock(_) ->
    ].
 
 vtime(Node) ->
-   {uid, Uid} = uid:l(),
-   {uid, Node, Uid}.
+   {uid, T, Seq} = uid:l(),
+   {uid, Node, T, Seq}.
 
 
 

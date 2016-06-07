@@ -6,7 +6,7 @@
 -define(SEQ_MAX,   1023).
 
 %%
-%% internal sequence state
+%% internal k-order representation
 -record(uid, {
    node = undefined :: node()
   ,t    = undefined :: any()

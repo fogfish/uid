@@ -68,23 +68,23 @@
 -spec(l/1 :: (g()) -> l()).
 
 l() -> 
-   {uid, k()}.
+   k().
 
 
-l({uid, Node, Uid})
+l({uid, Node, T, Seq})
  when is_binary(Node) ->
    case ?CONFIG_UID:node() of
       Node ->
-         {uid, Uid};
+         {uid, T, Seq};
       _    ->
          exit(badarg)
    end;
 
-l({uid, Node, Uid})
+l({uid, Node, T, Seq})
  when is_atom(Node) ->
    case erlang:node() of
       Node ->
-         {uid, Uid};
+         {uid, T, Seq};
       _    ->
          exit(badarg)
    end.
@@ -98,10 +98,10 @@ l({uid, Node, Uid})
 g() ->
    g(l()).
 
-g({uid, Uid}) ->
-   {uid, erlang:node(), Uid};
+g({uid, T, Seq}) ->
+   {uid, erlang:node(), T, Seq};
 
-g({uid, _, _} = Uid) ->
+g({uid, _, _, _} = Uid) ->
    Uid.
 
 %%
@@ -109,12 +109,12 @@ g({uid, _, _} = Uid) ->
 %% encode k-order number to binary format
 -spec(encode/1 :: (l() | g()) -> binary()).
 
-encode({uid, {A, B, C, Seq}}) ->
+encode({uid, {A, B, C}, Seq}) ->
    <<A:20, B:20, C:10, Seq:14>>;
-encode({uid, Node, {A, B, C, Seq}})
+encode({uid, Node, {A, B, C}, Seq})
  when Node =:= erlang:node() ->
    <<(?CONFIG_UID:node())/binary, A:20, B:20, C:10, Seq:14>>;
-encode({uid, Node, {A, B, C, Seq}})
+encode({uid, Node, {A, B, C}, Seq})
  when is_binary(Node) ->
    <<Node/binary, A:20, B:20, C:10, Seq:14>>.
 
@@ -124,21 +124,21 @@ encode({uid, Node, {A, B, C, Seq}})
 -spec(decode/1 :: (binary()) -> l() | g()).
 
 decode(<<A:20, B:20, C:10, Seq:14>>) ->
-   {uid, {A, B, C, Seq}};
+   {uid, {A, B, C}, Seq};
 decode(<<Node:4/binary, A:20, B:20, C:10, Seq:14>>) ->
    case ?CONFIG_UID:node() of
       Node ->
-         {uid, erlang:node(), {A, B, C, Seq}};
+         {uid, erlang:node(), {A, B, C}, Seq};
       _    ->
-         {uid, Node, {A, B, C, Seq}}
+         {uid, Node, {A, B, C}, Seq}
    end;
 
 decode(<<Node:8/binary, A:20, B:20, C:10, Seq:14>>) ->
    case ?CONFIG_UID:node() of
       Node ->
-         {uid, erlang:node(), {A, B, C, Seq}};
+         {uid, erlang:node(), {A, B, C}, Seq};
       _    ->
-         {uid, Node, {A, B, C, Seq}}
+         {uid, Node, {A, B, C}, Seq}
    end.
 
 
@@ -154,36 +154,36 @@ decode(<<Node:8/binary, A:20, B:20, C:10, Seq:14>>) ->
 %% the operation do not guarantee uniqueness of the result
 -spec(gtol/1 :: (g()) -> l()).
 
-gtol({uid, _Node, Uid}) ->
-   {uid, Uid}.
+gtol({uid, _Node, T, Seq}) ->
+   {uid, T, Seq}.
 
 %%
 %% @doc
 %% approximate distance between k-order values
 -spec(d/2 :: (l() | g(), l() | g()) -> k()).
 
-d({uid, A}, {uid, B}) ->
-   {uid, d(A, B)}; 
+d({uid, A, Sa}, {uid, B, Sb}) ->
+   {uid, d(A, B), Sa - Sb}; 
 
-d({uid, Node, A}, {uid, Node, B}) ->
-   {uid, Node, d(A, B)};
+d({uid, Node, A, Sa}, {uid, Node, B, Sb}) ->
+   {uid, Node, d(A, B), Sa - Sb};
 
-d({A2, A1, A0, As}, {B2, B1, B0, Bs}) ->
+d({A2, A1, A0}, {B2, B1, B0}) ->
    X = timer:now_diff({A2, A1, A0}, {B2, B1, B0}),
    C = X rem ?BASE,
    Y = X div ?BASE,
    B = Y rem ?BASE,
    A = Y div ?BASE,
-   {A, B, C, As - Bs}.
+   {A, B, C}.
 
 %%
 %% @doc
 %% helper function to extract time-stamp in milliseconds from k-order value
 -spec(t/1 :: (l() | g()) -> integer()).
 
-t({uid, {A, B, C, _}}) ->
+t({uid, {A, B, C}, _}) ->
    (A * ?BASE + B) * 1000 + C div 1000;
-t({uid, _, {A, B, C, _}}) ->
+t({uid, _, {A, B, C}, _}) ->
    (A * ?BASE + B) * 1000 + C div 1000.
 
 %%
@@ -241,11 +241,11 @@ vclock(Vclock) ->
 join(A, B) ->
    do_join(lists:keysort(2, A), lists:keysort(2, B)).
 
-do_join([{uid, NodeA, _}=X|A], [{uid, NodeB, _}|_]=B)
+do_join([{uid, NodeA, _, _}=X|A], [{uid, NodeB, _, _}|_]=B)
  when NodeA < NodeB ->
    [X | do_join(A, B)];
 
-do_join([{uid, NodeA, _}|_]=A, [{uid, NodeB, _}=X|B])
+do_join([{uid, NodeA, _, _}|_]=A, [{uid, NodeB, _, _}=X|B])
  when NodeA > NodeB ->
    [X | do_join(A, B)];
 
@@ -264,7 +264,7 @@ do_join(A, []) ->
 
 descend(_, []) ->
    true;
-descend(A, [{uid, Node, _} = X|B]) ->
+descend(A, [{uid, Node, _, _} = X|B]) ->
    case lists:keyfind(Node, 2, A) of
       false ->
          false;
@@ -287,7 +287,7 @@ descend(Node, A, B)
 
 diff(_, []) ->
    [];
-diff(A, [{uid, Node, _} = X|B]) ->
+diff(A, [{uid, Node, _, _} = X|B]) ->
    case lists:keyfind(Node, 2, A) of
       false ->
          [X | diff(A, B)];
@@ -310,16 +310,11 @@ diff(A, [{uid, Node, _} = X|B]) ->
 
 -ifndef(CONFIG_NATIVE).
 k() ->
-   #uid{t = {A, B, C}, id = Id, seq = Seq} = gen_server:call(whereis(), seq, infinity),
-   % <<A:20, B:20, C:10, Id:4, Seq:10>>
-   {A, B, C, (Id bsl 10) + Seq}.
-
+   #uid{t = T, id = Id, seq = Seq} = gen_server:call(whereis(), seq, infinity),
+   {uid, T, (Id bsl 10) + Seq}.
 -else.
 k() ->
-   {A, B, C} = os:timestamp(),
-   Seq = erlang:unique_integer([monotonic]) rem 16384,
-   % <<A:20, B:20, C:10, Seq:14>>
-   {A, B, C, Seq}.
+   {uid, os:timestamp(), erlang:unique_integer([monotonic])}.
 -endif.
 
 
