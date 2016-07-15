@@ -64,8 +64,8 @@
 %%
 %% @doc
 %% generate locally unique 64-bit k-order identifier
--spec(l/0 :: ()    -> l()).
--spec(l/1 :: (g()) -> l()).
+-spec l()    -> l().
+-spec l(g()) -> l().
 
 l() -> 
    k().
@@ -92,8 +92,8 @@ l({uid, Node, T, Seq})
 %%
 %% @doc
 %% generate globally unique 128-bit k-order identifier
--spec(g/0 :: () -> g()).
--spec(g/1 :: (l()) -> g()).
+-spec g() -> g().
+-spec g(l()) -> g().
 
 g() ->
    g(l()).
@@ -107,7 +107,7 @@ g({uid, _, _, _} = Uid) ->
 %%
 %% @doc
 %% encode k-order number to binary format
--spec(encode/1 :: (l() | g()) -> binary()).
+-spec encode(l() | g()) -> binary().
 
 encode({uid, {A, B, C}, Seq}) ->
    <<A:20, B:20, C:10, Seq:14>>;
@@ -121,7 +121,7 @@ encode({uid, Node, {A, B, C}, Seq})
 %%
 %% @doc
 %% decode k-order number from binary format
--spec(decode/1 :: (binary()) -> l() | g()).
+-spec decode(binary()) -> l() | g().
 
 decode(<<A:20, B:20, C:10, Seq:14>>) ->
    {uid, {A, B, C}, Seq};
@@ -152,7 +152,7 @@ decode(<<Node:8/binary, A:20, B:20, C:10, Seq:14>>) ->
 %% @doc
 %% cast with force global to local k-order identifier
 %% the operation do not guarantee uniqueness of the result
--spec(gtol/1 :: (g()) -> l()).
+-spec gtol(g()) -> l().
 
 gtol({uid, _Node, T, Seq}) ->
    {uid, T, Seq}.
@@ -160,7 +160,7 @@ gtol({uid, _Node, T, Seq}) ->
 %%
 %% @doc
 %% approximate distance between k-order values
--spec(d/2 :: (l() | g(), l() | g()) -> k()).
+-spec d(l() | g(), l() | g()) -> k().
 
 d({uid, A, Sa}, {uid, B, Sb}) ->
    {uid, d(A, B), Sa - Sb}; 
@@ -179,7 +179,7 @@ d({A2, A1, A0}, {B2, B1, B0}) ->
 %%
 %% @doc
 %% helper function to extract time-stamp in milliseconds from k-order value
--spec(t/1 :: (l() | g()) -> integer()).
+-spec t(l() | g()) -> integer().
 
 t({uid, {A, B, C}, _}) ->
    (A * ?BASE + B) * 1000 + C div 1000;
@@ -189,7 +189,7 @@ t({uid, _, {A, B, C}, _}) ->
 %%
 %% @doc
 %% bind process with sequence
--spec(bind/1 :: (any()) -> ok).
+-spec bind(any()) -> ok.
 
 -ifndef(CONFIG_NATIVE).
 bind(Id)
@@ -217,14 +217,14 @@ bind(_) ->
 
 %%
 %% create new v-clock
--spec(vclock/0 :: () -> vclock()).
+-spec vclock() -> vclock().
 
 vclock() ->
    [g()].
 
 %%
 %% increment v-clock
--spec(vclock/1 :: (vclock()) -> vclock()).
+-spec vclock(vclock()) -> vclock().
 
 vclock(Vclock) ->
    case lists:keytake(erlang:node(), 2, Vclock) of
@@ -236,7 +236,7 @@ vclock(Vclock) ->
 
 %%
 %% join two v-clock
--spec(join/2 :: (vclock(), vclock()) -> vclock()). 
+-spec join(vclock(), vclock()) -> vclock(). 
 
 join(A, B) ->
    do_join(lists:keysort(2, A), lists:keysort(2, B)).
@@ -260,7 +260,7 @@ do_join(A, []) ->
 
 %%
 %% return true if A v-clock is descend of B v-clock : A -> B 
--spec(descend/2 :: (vclock(), vclock()) -> boolean()).
+-spec descend(vclock(), vclock()) -> boolean().
 
 descend(_, []) ->
    true;
@@ -275,7 +275,7 @@ descend(A, [{uid, Node, _, _} = X|B]) ->
 %%
 %% return true if A clock is descend B with an exception to given peer 
 %% the method allows to discover local conflicts
--spec(descend/3 :: (node(), vclock(), vclock()) -> boolean()).
+-spec descend(node(), vclock(), vclock()) -> boolean().
 
 descend(Node, A, B)
  when is_atom(Node) ->
@@ -283,7 +283,7 @@ descend(Node, A, B)
 
 %%
 %% return difference of A clock to compare with B 
--spec(diff/2 :: (vclock(), vclock()) -> [node()]).
+-spec diff(vclock(), vclock()) -> [node()].
 
 diff(_, []) ->
    [];
@@ -306,7 +306,7 @@ diff(A, [{uid, Node, _, _} = X|B]) ->
 %%
 %% @doc
 %% generate unique k-order identifier
--spec(k/0 :: () -> k()).
+-spec k() -> k().
 
 -ifndef(CONFIG_NATIVE).
 k() ->
@@ -331,3 +331,4 @@ whereis() ->
          Pid
    end.
 -endif.
+
