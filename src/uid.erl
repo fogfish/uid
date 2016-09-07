@@ -109,38 +109,46 @@ g({uid, _, _, _} = Uid) ->
 %% encode k-order number to binary format
 -spec encode(l() | g()) -> binary().
 
-encode({uid, {A, B, C}, Seq}) ->
-   <<A:20, B:20, C:10, Seq:14>>;
-encode({uid, Node, {A, B, C}, Seq})
+encode({uid, T, Seq}) ->
+   <<(encode_t(T))/bits, Seq:14>>;
+
+encode({uid, Node, T, Seq})
  when Node =:= erlang:node() ->
-   <<(?CONFIG_UID:node())/binary, A:20, B:20, C:10, Seq:14>>;
-encode({uid, Node, {A, B, C}, Seq})
+   <<(?CONFIG_UID:node())/binary, (encode_t(T))/bits, Seq:14>>;
+
+encode({uid, Node, T, Seq})
  when is_binary(Node) ->
-   <<Node/binary, A:20, B:20, C:10, Seq:14>>.
+   <<Node/binary, (encode_t(T))/bits, Seq:14>>.
+
+encode_t({A, B, C}) ->
+   <<T:50/bits, _/bits>> = <<A:20, B:20, C:20>>,
+   T.
 
 %%
 %% @doc
 %% decode k-order number from binary format
 -spec decode(binary()) -> l() | g().
 
-decode(<<A:20, B:20, C:10, Seq:14>>) ->
-   {uid, {A, B, C}, Seq};
-decode(<<Node:4/binary, A:20, B:20, C:10, Seq:14>>) ->
+decode(<<T:50/bits, Seq:14>>) ->
+   {uid, decode_t(T), Seq};
+decode(<<Node:4/binary, T:50/bits, Seq:14>>) ->
    case ?CONFIG_UID:node() of
       Node ->
-         {uid, erlang:node(), {A, B, C}, Seq};
+         {uid, erlang:node(), decode_t(T), Seq};
       _    ->
-         {uid, Node, {A, B, C}, Seq}
+         {uid, Node, decode_t(T), Seq}
    end;
 
-decode(<<Node:8/binary, A:20, B:20, C:10, Seq:14>>) ->
+decode(<<Node:8/binary, T:50/bits, Seq:14>>) ->
    case ?CONFIG_UID:node() of
       Node ->
-         {uid, erlang:node(), {A, B, C}, Seq};
+         {uid, erlang:node(), decode_t(T), Seq};
       _    ->
-         {uid, Node, {A, B, C}, Seq}
+         {uid, Node, decode_t(T), Seq}
    end.
 
+decode_t(<<A:20, B:20, C:10>>) ->
+   {A, B, C bsl 10}.
 
 %%%----------------------------------------------------------------------------   
 %%%

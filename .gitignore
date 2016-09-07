@@ -6,8 +6,7 @@
 *.tag.gz
 *.tgz
 ebin/
-deps/
-deps.config
-.eunit/
-rebar
+_build/
+rebar.lock
+rebar3
 *.sublime-*
