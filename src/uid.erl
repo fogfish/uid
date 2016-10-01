@@ -46,14 +46,16 @@
 
 %%
 %% data types
--export_type([l/0, g/0, vclock/0]).
--type(l()      ::  {uid, binary()}).
--type(g()      ::  {uid, binary(), binary()}).
--type(k()      ::  {uid, node(), t(), id(), seq()}).
--type(t()      ::  {integer(), integer(), integer()}).
--type(id()     ::  integer()).
--type(seq()    ::  integer()).
--type(vclock() ::  [g()]).
+-export_type([uid/0, l/0, g/0, vclock/0]).
+-type uid()    :: l() | g().
+-type l()      :: {uid, t(), seq()}.
+-type g()      :: {uid, id(), t(), seq()}.
+
+-type t()      :: {integer(), integer(), integer()}.
+-type seq()    :: <<_:14>>.
+-type id()     :: node() | <<_:4>>.
+
+-type vclock() ::  [g()].
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -168,7 +170,7 @@ gtol({uid, _Node, T, Seq}) ->
 %%
 %% @doc
 %% approximate distance between k-order values
--spec d(l() | g(), l() | g()) -> k().
+-spec d(uid(), uid()) -> uid().
 
 d({uid, A, Sa}, {uid, B, Sb}) ->
    {uid, d(A, B), Sa - Sb}; 
@@ -314,15 +316,15 @@ diff(A, [{uid, Node, _, _} = X|B]) ->
 %%
 %% @doc
 %% generate unique k-order identifier
--spec k() -> k().
-
 -ifndef(CONFIG_NATIVE).
 k() ->
    #uid{t = T, id = Id, seq = Seq} = gen_server:call(whereis(), seq, infinity),
    {uid, T, (Id bsl 10) + Seq}.
 -else.
 k() ->
-   {uid, os:timestamp(), erlang:unique_integer([monotonic])}.
+   I = erlang:unique_integer([monotonic, positive]) ,
+   {A, B, C} = os:timestamp(),
+   {uid, {A, B, C band 16#ffc00}, I band 16#3fff}.
 -endif.
 
 
