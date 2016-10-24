@@ -48,11 +48,10 @@
 %% data types
 -export_type([uid/0, l/0, g/0, vclock/0]).
 -type uid()    :: l() | g().
--type l()      :: {uid, lt(), seq()}.
--type g()      :: {uid, gt(), seq()}.
+-type l()      :: {uid, t(), seq()}.
+-type g()      :: {uid, id(), g(), seq()}.
 
--type lt()     :: {integer(), integer(), integer(), integer()}.
--type gt()     :: {integer(), integer(), id(), integer(), integer()}.
+-type t()      :: {integer(), integer(), integer()}.
 -type seq()    :: <<_:14>>.
 -type id()     :: node() | <<_:32>>.
 
@@ -78,25 +77,25 @@ z() ->
 -spec l(g()) -> l().
 
 l() -> 
-   {uid, lt(), seq()}.
+   {uid, t(), seq()}.
 
-l({uid, {_, _, _, _}, _} = Uid) ->
+l({uid, _, _} = Uid) ->
    Uid;
 
-l({uid, {A, B, Node, C, D}, Seq})
+l({uid, Node, T, Seq})
  when is_binary(Node) ->
    case hid(erlang:node()) of
       Node ->
-         {uid, {A, B, C, D}, Seq};
+         {uid, T, Seq};
       _    ->
          exit(badarg)
    end;
 
-l({uid, {A, B, Node, C, D}, Seq})
+l({uid, Node, T, Seq})
  when is_atom(Node) ->
    case erlang:node() of
       Node ->
-         {uid, {A, B, C, D}, Seq};
+         {uid, T, Seq};
       _    ->
          exit(badarg)
    end.
@@ -108,12 +107,12 @@ l({uid, {A, B, Node, C, D}, Seq})
 -spec g(l()) -> g().
 
 g() ->
-   {uid, gt(erlang:node()), seq()}.
+   {uid, erlang:node(), t(), seq()}.
 
-g({uid, {A, B, C, D}, Seq}) ->
-   {uid, {A, B, erlang:node(), C, D}, Seq};
+g({uid, T, Seq}) ->
+   {uid, erlang:node(), T, Seq};
 
-g({uid, {_, _, _, _, _}, _} = Uid) ->
+g({uid, _, _, _} = Uid) ->
    Uid.
 
 %%
@@ -122,45 +121,42 @@ g({uid, {_, _, _, _, _}, _} = Uid) ->
 -spec encode(l() | g()) -> binary().
 
 encode({uid, T, Seq}) ->
-   <<(encode_t(T))/bits, Seq:14>>.
+   <<(encode_t(T))/bits, Seq:14>>;
 
-encode_t({A, B, C, D}) ->
-   L0 = 20 - ?CONFIG_DRIFT,
-   L1 = ?CONFIG_DRIFT, 
-   <<T:50/bits, _/bits>> = <<A:20, B:L0, C:L1, D:20>>,
-   T;
+encode({uid, Node, T, Seq}) ->
+   <<(encode_t(Node, T))/bits, Seq:14>>.
 
-encode_t({A, B, Node, C, D})
- when Node =:= erlang:node() ->
-   ID = hid(erlang:node()),
-   L0 = 20 - ?CONFIG_DRIFT,
-   L1 = ?CONFIG_DRIFT, 
-   <<T:82/bits, _/bits>> = <<A:20, B:L0, ID/binary, C:L1, D:20>>,
-   T;
+encode_t({A, B, C}) ->
+   <<T:50/bits, _/bits>> = <<A:20, B:20, C:20>>,
+   T.
 
-encode_t({A, B, Node, C, D})
+encode_t(Node, {A, B, C})
  when is_binary(Node) ->
    L0 = 20 - ?CONFIG_DRIFT,
    L1 = ?CONFIG_DRIFT, 
-   <<T:82/bits, _/bits>> = <<A:20, B:L0, Node/binary, C:L1, D:20>>,
-   T.
+   B0 = B bsr  ?CONFIG_DRIFT,
+   B1 = B band ((1 bsl ?CONFIG_DRIFT) - 1),
+   <<T:82/bits, _/bits>> = <<A:20, B0:L0, Node/binary, B1:L1, C:20>>,
+   T;
+
+encode_t(Node, T) ->
+   encode_t(hid(Node), T).
+
 
 %%
 %% @doc
 %% decode k-order number from binary format
 -spec decode(binary()) -> l() | g().
 
-decode(<<T:50/bits, Seq:14>>) ->
-   {uid, decode_lt(T), Seq};
+decode(<<Prefix:50/bits, Seq:14>>) ->
+   {uid, decode_lt(Prefix), Seq};
 
-decode(<<T:82/bits, Seq:14>>) ->
-   {uid, decode_gt(T), Seq}.
+decode(<<Prefix:82/bits, Seq:14>>) ->
+   {Node, T} = decode_gt(Prefix),
+   {uid, Node, T, Seq}.
 
-decode_lt(T) ->
-   L0 = 20 - ?CONFIG_DRIFT,
-   L1 = ?CONFIG_DRIFT, 
-   <<A:20, B:L0, C:L1, D:10>> = T,
-   {A, B, C, D bsl 10}.
+decode_lt(<<A:20, B:20, C:10>> ) ->
+   {A, B, C bsl 10}.
 
 decode_gt(T) ->
    L0 = 20 - ?CONFIG_DRIFT,
@@ -168,9 +164,9 @@ decode_gt(T) ->
    <<A:20, B:L0, Node:4/binary, C:L1, D:10>> = T,
    case hid(erlang:node()) of
       Node ->
-         {A, B, erlang:node(), C, D bsl 10};
+         {erlang:node(), {A, B bsl ?CONFIG_DRIFT + C, D bsl 10}};
       _    ->
-         {A, B, Node, C, D bsl 10}
+         {Node, {A, B bsl ?CONFIG_DRIFT + C, D bsl 10}}
    end.
 
 %%%----------------------------------------------------------------------------   
@@ -185,43 +181,37 @@ decode_gt(T) ->
 %% the operation do not guarantee uniqueness of the result
 -spec gtol(g()) -> l().
 
-gtol({uid, {A, B, _, C, D}, Seq}) ->
-   {uid, {A, B, C, D}, Seq}.
+gtol({uid, _, T, Seq}) ->
+   {uid, T, Seq}.
 
 %%
 %% @doc
 %% approximate distance between k-order values
 -spec d(uid(), uid()) -> uid().
 
-d({uid, TA, SeqA}, {uid, TB, SeqB}) ->
-   {uid, d(TA, TB), SeqA - SeqB}; 
+d({uid, A, Sa}, {uid, B, Sb}) ->
+   {uid, d(A, B), Sa - Sb}; 
 
-d({A1, B1, C1, D1}, {A2, B2, C2, D2}) ->
-   X = timer:now_diff(
-      {A1, (B1 bsl ?CONFIG_DRIFT) + C1, D1}, 
-      {A2, (B2 bsl ?CONFIG_DRIFT) + C2, D2}
-   ),
-   D  = X rem ?BASE,
-   Y0 = X div ?BASE,
-   B0 = Y0 rem ?BASE,
-   B  = B0 bsr  ?CONFIG_DRIFT,
-   C  = B0 band ((1 bsl ?CONFIG_DRIFT) - 1),
-   A  = Y0 div ?BASE,
-   {A, B, C, D};
+d({uid, Node, A, Sa}, {uid, Node, B, Sb}) ->
+   {uid, Node, d(A, B), Sa - Sb};
 
-d({A1, B1, Node, C1, D1}, {A2, B2, Node, C2, D2}) ->
-   d({A1, B1, C1, D1}, {A2, B2, C2, D2}).   
+d({A2, A1, A0}, {B2, B1, B0}) ->
+   X = timer:now_diff({A2, A1, A0}, {B2, B1, B0}),
+   C = X rem ?BASE,
+   Y = X div ?BASE,
+   B = Y rem ?BASE,
+   A = Y div ?BASE,
+   {A, B, C}.
 
 %%
 %% @doc
 %% helper function to extract time-stamp in milliseconds from k-order value
 -spec t(l() | g()) -> integer().
 
-t({uid, {A, B, C, D}, _}) ->
-   (A * ?BASE + (B bsl ?CONFIG_DRIFT) + C) * 1000 + D div 1000;
-t({uid, {A, B, _, C, D}, _}) ->
-   (A * ?BASE + (B bsl ?CONFIG_DRIFT) + C) * 1000 + D div 1000.
-
+t({uid, {A, B, C}, _}) ->
+   (A * ?BASE + B) * 1000 + C div 1000;
+t({uid, _, {A, B, C}, _}) ->
+   (A * ?BASE + B) * 1000 + C div 1000.
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -319,21 +309,21 @@ diff(A, [{uid, Node, _, _} = X|B]) ->
 
 %%
 %% local time stamp
-lt() ->
-   {A, B0, C0} = os:timestamp(),
-   B = B0 bsr  ?CONFIG_DRIFT,
-   C = B0 band ((1 bsl ?CONFIG_DRIFT) - 1),
-   D = C0 band 16#ffc00,
-   {A, B, C, D}.
+t() ->
+   {A, B, C} = os:timestamp(),
+   % B = B0 bsr  ?CONFIG_DRIFT,
+   % C = B0 band ((1 bsl ?CONFIG_DRIFT) - 1),
+   % D = ,
+   {A, B, C band 16#ffc00}.
 
 %%
 %% global time stamp
-gt(Node) ->
-   {A, B0, C0} = os:timestamp(),
-   B = B0 bsr  ?CONFIG_DRIFT,
-   C = B0 band ((1 bsl ?CONFIG_DRIFT) - 1),
-   D = C0 band 16#ffc00,
-   {A, B, Node, C, D}.
+% gt(Node) ->
+%    {A, B0, C0} = os:timestamp(),
+%    B = B0 bsr  ?CONFIG_DRIFT,
+%    C = B0 band ((1 bsl ?CONFIG_DRIFT) - 1),
+%    D = C0 band 16#ffc00,
+%    {A, B, Node, C, D}.
 
 %%
 %% locally unique sequential number 14-bit length 
