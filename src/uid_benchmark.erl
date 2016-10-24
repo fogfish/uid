@@ -13,21 +13,18 @@
 %%
 run() ->
    application:start(uid),
-   Hashmap = ets:new(undefined, [public, set, {write_concurrency, true}]),
-   case timer:tc(fun() -> exec(?N, Hashmap) end) of
+   case timer:tc(fun() -> exec(?N) end) of
       {T, ok} ->
          TPU = ?N * ?LOOP / T,
          TPS = ?N * ?LOOP / (T / 1000000),
-         ets:delete(Hashmap),
          {TPU, TPS};
       {_, Error} ->
-         ets:delete(Hashmap),
          Error
    end.
 
-exec(N, Hashmap) ->
+exec(N) ->
    Self = self(),
-   Pids = [spawn_link(fun() -> loop(Self, uid:bind(Id), Hashmap, ?LOOP) end) || Id <- lists:seq(1, N)],
+   Pids = [spawn_link(fun() -> loop(Self, ?LOOP) end) || _ <- lists:seq(1, N)],
    fold(Pids).
 
 fold([]) -> ok;
@@ -38,17 +35,11 @@ fold([Pid | Pids]) ->
       {error, timeout}
    end.
 
-loop(Pid, _Id, _Hashmap, 0) ->
+loop(Pid, 0) ->
    Pid ! {ok, self()};
-loop(Pid,  Id,  Hashmap, N) ->
+loop(Pid, N) ->
    _Uid = uid:l(),
-   % case ets:insert_new(Hashmap, {Uid, 1}) of
-   %    true  ->
-   %       ok;
-   %    false ->
-   %       io:format("=> uid conflict ~p~n", [Uid])
-   % end,
-   loop(Pid, Id, Hashmap, N - 1).
+   loop(Pid, N - 1).
 
 %%%----------------------------------------------------------------------------   
 %%%
