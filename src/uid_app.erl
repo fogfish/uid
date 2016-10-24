@@ -24,60 +24,8 @@
 %%
 %%
 start(_Type, _Args) -> 
-   {ok, Sup} = uid_sup:start_link(),
-   config_worker_id(),
-   {ok, Sup}.
+   uid_sup:start_link().
 
 stop(_State) ->
    ok.
-
-%%
-%%
-config_worker_id() ->
-   case application:get_env(uid, worker) of
-      %% xx:xx:xx:xx:xx:xx
-      {ok, Mac} when is_list(Mac), length(Mac) =:= 17 ->
-         application:set_env(uid, worker, hwaddr_to_binary(Mac));
-      {ok, Eth} ->
-         application:set_env(uid, worker, hwaddr_to_binary(hwaddr(Eth)));
-      _ ->
-         application:set_env(uid, worker, hwaddr_to_binary(hwaddr()))
-   end.
-
-%%
-%%
-hwaddr_to_binary(Mac)
- when is_list(Mac) ->
-   list_to_binary([ list_to_integer(X, 16) || X <- string:tokens(Mac, ":") ]);
-
-hwaddr_to_binary(Mac) 
- when is_binary(Mac) ->
-   Mac.
-
-%%
-%%
-hwaddr(Eth) ->
-   {ok, List} = inet:getifaddrs(),
-   case proplists:get_value(Eth, List) of
-      undefined ->
-         exit({badarg, Eth});
-      Interface ->
-         list_to_binary(proplists:get_value(hwaddr, Interface))
-   end.
-
-hwaddr() ->
-   {ok, List} = inet:getifaddrs(),
-   hwaddr1(List).
-
-hwaddr1([{_, Head} | Tail]) ->
-   case proplists:get_value(hwaddr, Head) of
-      undefined ->
-         hwaddr1(Tail);
-      Mac ->
-         list_to_binary(Mac)
-   end;
-hwaddr1([]) ->
-   exit(badarg).
-
-
 

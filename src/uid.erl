@@ -33,7 +33,6 @@
    gtol/1
   ,d/2
   ,t/1
-  ,bind/1
 ]).
 %% v-clock interface
 -export([
@@ -49,12 +48,13 @@
 %% data types
 -export_type([uid/0, l/0, g/0, vclock/0]).
 -type uid()    :: l() | g().
--type l()      :: {uid, t(), seq()}.
--type g()      :: {uid, id(), t(), seq()}.
+-type l()      :: {uid, lt(), seq()}.
+-type g()      :: {uid, gt(), seq()}.
 
--type t()      :: {integer(), integer(), integer()}.
+-type lt()     :: {integer(), integer(), integer(), integer()}.
+-type gt()     :: {integer(), integer(), id(), integer(), integer()}.
 -type seq()    :: <<_:14>>.
--type id()     :: node() | <<_:4>>.
+-type id()     :: node() | <<_:32>>.
 
 -type vclock() ::  [g()].
 
@@ -68,7 +68,7 @@
 %%
 -spec z() -> l().
 z() ->
-   {uid, {0,0,0}, 0}.
+   {uid, {0,0,0,0}, 0}.
    
 
 %%
@@ -78,40 +78,42 @@ z() ->
 -spec l(g()) -> l().
 
 l() -> 
-   k().
+   {uid, lt(), seq()}.
 
+l({uid, {_, _, _, _}, _} = Uid) ->
+   Uid;
 
-l({uid, Node, T, Seq})
+l({uid, {A, B, Node, C, D}, Seq})
  when is_binary(Node) ->
-   case ?CONFIG_UID:node() of
+   case hid(erlang:node()) of
       Node ->
-         {uid, T, Seq};
+         {uid, {A, B, C, D}, Seq};
       _    ->
          exit(badarg)
    end;
 
-l({uid, Node, T, Seq})
+l({uid, {A, B, Node, C, D}, Seq})
  when is_atom(Node) ->
    case erlang:node() of
       Node ->
-         {uid, T, Seq};
+         {uid, {A, B, C, D}, Seq};
       _    ->
          exit(badarg)
    end.
 
 %%
 %% @doc
-%% generate globally unique 128-bit k-order identifier
+%% generate globally unique 96-bit k-order identifier
 -spec g() -> g().
 -spec g(l()) -> g().
 
 g() ->
-   g(l()).
+   {uid, gt(erlang:node()), seq()}.
 
-g({uid, T, Seq}) ->
-   {uid, erlang:node(), T, Seq};
+g({uid, {A, B, C, D}, Seq}) ->
+   {uid, {A, B, erlang:node(), C, D}, Seq};
 
-g({uid, _, _, _} = Uid) ->
+g({uid, {_, _, _, _, _}, _} = Uid) ->
    Uid.
 
 %%
@@ -120,18 +122,27 @@ g({uid, _, _, _} = Uid) ->
 -spec encode(l() | g()) -> binary().
 
 encode({uid, T, Seq}) ->
-   <<(encode_t(T))/bits, Seq:14>>;
+   <<(encode_t(T))/bits, Seq:14>>.
 
-encode({uid, Node, T, Seq})
+encode_t({A, B, C, D}) ->
+   L0 = 20 - ?CONFIG_DRIFT,
+   L1 = ?CONFIG_DRIFT, 
+   <<T:50/bits, _/bits>> = <<A:20, B:L0, C:L1, D:20>>,
+   T;
+
+encode_t({A, B, Node, C, D})
  when Node =:= erlang:node() ->
-   <<(?CONFIG_UID:node())/binary, (encode_t(T))/bits, Seq:14>>;
+   ID = hid(erlang:node()),
+   L0 = 20 - ?CONFIG_DRIFT,
+   L1 = ?CONFIG_DRIFT, 
+   <<T:82/bits, _/bits>> = <<A:20, B:L0, ID/binary, C:L1, D:20>>,
+   T;
 
-encode({uid, Node, T, Seq})
+encode_t({A, B, Node, C, D})
  when is_binary(Node) ->
-   <<Node/binary, (encode_t(T))/bits, Seq:14>>.
-
-encode_t({A, B, C}) ->
-   <<T:50/bits, _/bits>> = <<A:20, B:20, C:20>>,
+   L0 = 20 - ?CONFIG_DRIFT,
+   L1 = ?CONFIG_DRIFT, 
+   <<T:82/bits, _/bits>> = <<A:20, B:L0, Node/binary, C:L1, D:20>>,
    T.
 
 %%
@@ -140,25 +151,27 @@ encode_t({A, B, C}) ->
 -spec decode(binary()) -> l() | g().
 
 decode(<<T:50/bits, Seq:14>>) ->
-   {uid, decode_t(T), Seq};
-decode(<<Node:4/binary, T:50/bits, Seq:14>>) ->
-   case ?CONFIG_UID:node() of
-      Node ->
-         {uid, erlang:node(), decode_t(T), Seq};
-      _    ->
-         {uid, Node, decode_t(T), Seq}
-   end;
+   {uid, decode_lt(T), Seq};
 
-decode(<<Node:8/binary, T:50/bits, Seq:14>>) ->
-   case ?CONFIG_UID:node() of
+decode(<<T:82/bits, Seq:14>>) ->
+   {uid, decode_gt(T), Seq}.
+
+decode_lt(T) ->
+   L0 = 20 - ?CONFIG_DRIFT,
+   L1 = ?CONFIG_DRIFT, 
+   <<A:20, B:L0, C:L1, D:10>> = T,
+   {A, B, C, D bsl 10}.
+
+decode_gt(T) ->
+   L0 = 20 - ?CONFIG_DRIFT,
+   L1 = ?CONFIG_DRIFT, 
+   <<A:20, B:L0, Node:4/binary, C:L1, D:10>> = T,
+   case hid(erlang:node()) of
       Node ->
-         {uid, erlang:node(), decode_t(T), Seq};
+         {A, B, erlang:node(), C, D bsl 10};
       _    ->
-         {uid, Node, decode_t(T), Seq}
+         {A, B, Node, C, D bsl 10}
    end.
-
-decode_t(<<A:20, B:20, C:10>>) ->
-   {A, B, C bsl 10}.
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -172,60 +185,43 @@ decode_t(<<A:20, B:20, C:10>>) ->
 %% the operation do not guarantee uniqueness of the result
 -spec gtol(g()) -> l().
 
-gtol({uid, _Node, T, Seq}) ->
-   {uid, T, Seq}.
+gtol({uid, {A, B, _, C, D}, Seq}) ->
+   {uid, {A, B, C, D}, Seq}.
 
 %%
 %% @doc
 %% approximate distance between k-order values
 -spec d(uid(), uid()) -> uid().
 
-d({uid, A, Sa}, {uid, B, Sb}) ->
-   {uid, d(A, B), Sa - Sb}; 
+d({uid, TA, SeqA}, {uid, TB, SeqB}) ->
+   {uid, d(TA, TB), SeqA - SeqB}; 
 
-d({uid, Node, A, Sa}, {uid, Node, B, Sb}) ->
-   {uid, Node, d(A, B), Sa - Sb};
+d({A1, B1, C1, D1}, {A2, B2, C2, D2}) ->
+   X = timer:now_diff(
+      {A1, (B1 bsl ?CONFIG_DRIFT) + C1, D1}, 
+      {A2, (B2 bsl ?CONFIG_DRIFT) + C2, D2}
+   ),
+   D  = X rem ?BASE,
+   Y0 = X div ?BASE,
+   B0 = Y0 rem ?BASE,
+   B  = B0 bsr  ?CONFIG_DRIFT,
+   C  = B0 band ((1 bsl ?CONFIG_DRIFT) - 1),
+   A  = Y0 div ?BASE,
+   {A, B, C, D};
 
-d({A2, A1, A0}, {B2, B1, B0}) ->
-   X = timer:now_diff({A2, A1, A0}, {B2, B1, B0}),
-   C = X rem ?BASE,
-   Y = X div ?BASE,
-   B = Y rem ?BASE,
-   A = Y div ?BASE,
-   {A, B, C}.
+d({A1, B1, Node, C1, D1}, {A2, B2, Node, C2, D2}) ->
+   d({A1, B1, C1, D1}, {A2, B2, C2, D2}).   
 
 %%
 %% @doc
 %% helper function to extract time-stamp in milliseconds from k-order value
 -spec t(l() | g()) -> integer().
 
-t({uid, {A, B, C}, _}) ->
-   (A * ?BASE + B) * 1000 + C div 1000;
-t({uid, _, {A, B, C}, _}) ->
-   (A * ?BASE + B) * 1000 + C div 1000.
+t({uid, {A, B, C, D}, _}) ->
+   (A * ?BASE + (B bsl ?CONFIG_DRIFT) + C) * 1000 + D div 1000;
+t({uid, {A, B, _, C, D}, _}) ->
+   (A * ?BASE + (B bsl ?CONFIG_DRIFT) + C) * 1000 + D div 1000.
 
-%%
-%% @doc
-%% bind process with sequence
--spec bind(any()) -> ok.
-
--ifndef(CONFIG_NATIVE).
-bind(Id)
- when is_integer(Id) ->
-   I = case Id rem ?SEQ of
-      0 -> ?SEQ;
-      X -> X
-   end,
-   {_, Pid, _, _} = lists:keyfind(I, 1, supervisor:which_children(uid_seq_sup)),
-   erlang:put(uid_seq, Pid),
-   ok;
-
-bind(<<Id:4, _/bits>>) ->
-   bind(Id).
--else.
-bind(_) ->
-   ok.
--endif.
 
 %%%----------------------------------------------------------------------------   
 %%%
@@ -322,31 +318,29 @@ diff(A, [{uid, Node, _, _} = X|B]) ->
 %%%----------------------------------------------------------------------------   
 
 %%
-%% @doc
-%% generate unique k-order identifier
--ifndef(CONFIG_NATIVE).
-k() ->
-   #uid{t = T, id = Id, seq = Seq} = gen_server:call(whereis(), seq, infinity),
-   {uid, T, (Id bsl 10) + Seq}.
--else.
-k() ->
-   I = erlang:unique_integer([monotonic, positive]) ,
-   {A, B, C} = os:timestamp(),
-   {uid, {A, B, C band 16#ffc00}, I band 16#3fff}.
--endif.
-
+%% local time stamp
+lt() ->
+   {A, B0, C0} = os:timestamp(),
+   B = B0 bsr  ?CONFIG_DRIFT,
+   C = B0 band ((1 bsl ?CONFIG_DRIFT) - 1),
+   D = C0 band 16#ffc00,
+   {A, B, C, D}.
 
 %%
-%% where is sequence
--ifndef(CONFIG_NATIVE).
-whereis() ->
-   case erlang:get(uid_seq) of
-      undefined ->
-         Pid = gen_server:call(uid_master, pid, infinity),
-         erlang:put(uid_seq, Pid),
-         Pid;
-      Pid when is_pid(Pid) ->
-         Pid
-   end.
--endif.
+%% global time stamp
+gt(Node) ->
+   {A, B0, C0} = os:timestamp(),
+   B = B0 bsr  ?CONFIG_DRIFT,
+   C = B0 band ((1 bsl ?CONFIG_DRIFT) - 1),
+   D = C0 band 16#ffc00,
+   {A, B, Node, C, D}.
 
+%%
+%% locally unique sequential number 14-bit length 
+seq() ->
+   erlang:unique_integer([monotonic, positive]) band 16#3fff.
+
+%%
+%% host unique identifier
+hid(Node) ->
+   <<(erlang:phash(Node, 1 bsl 32)):32>>.

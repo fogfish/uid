@@ -40,8 +40,6 @@ init(_) ->
       {
          {one_for_all, 2, 3600},
          [
-            ?CHILD(supervisor, uid_seq_sup)
-           ,?CHILD(worker,     uid_master)
          ]
       }
    }.

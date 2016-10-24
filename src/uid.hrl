@@ -1,17 +1,14 @@
 
-%% max number of parallel sequences
--define(SEQ,         16).
-
-%% max sequence value
--define(SEQ_MAX,   1023).
+%%
+%%
+% -define(CONFIG_DRIFT,  5). %% ~30 sec
+% -define(CONFIG_DRIFT,  6). %%  ~1 min
+% -define(CONFIG_DRIFT,  7). %%  ~2 min
+-define(CONFIG_DRIFT,  8). %%  ~5 min
+% -define(CONFIG_DRIFT,  9). %% ~10 min
+% -define(CONFIG_DRIFT, 10). %% ~15 min
 
 %%
-%% internal k-order representation
--record(uid, {
-   node = undefined :: node()
-  ,t    = undefined :: any()
-  ,id   = undefined :: any()
-  ,seq  = undefined :: any()
-}).
-
+%%
 -define(BASE,          1000000).
+
