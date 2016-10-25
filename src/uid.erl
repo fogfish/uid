@@ -26,7 +26,9 @@
   ,g/0
   ,g/1
   ,encode/1
+  ,encode/2
   ,decode/1
+  ,decode/2
 ]).
 %% k-order utility
 -export([
@@ -119,54 +121,62 @@ g({uid, _, _, _} = Uid) ->
 %% @doc
 %% encode k-order number to binary format
 -spec encode(l() | g()) -> binary().
+-spec encode(integer(), l() | g()) -> binary().
 
-encode({uid, T, Seq}) ->
+encode(Uid) ->
+   encode(?CONFIG_DRIFT, Uid).
+
+encode(_Bits, {uid, T, Seq}) ->
    <<(encode_t(T))/bits, Seq:14>>;
 
-encode({uid, Node, T, Seq}) ->
-   <<(encode_t(Node, T))/bits, Seq:14>>.
+encode(Bits, {uid, Node, T, Seq}) ->
+   <<(encode_t(Bits, Node, T))/bits, Seq:14>>.
 
 encode_t({A, B, C}) ->
    <<T:50/bits, _/bits>> = <<A:20, B:20, C:20>>,
    T.
 
-encode_t(Node, {A, B, C})
- when is_binary(Node) ->
-   L0 = 20 - ?CONFIG_DRIFT,
-   L1 = ?CONFIG_DRIFT, 
-   B0 = B bsr  ?CONFIG_DRIFT,
-   B1 = B band ((1 bsl ?CONFIG_DRIFT) - 1),
+encode_t(Bits, Node, {A, B, C})
+ when is_binary(Node), Bits >= ?CONFIG_DRIFT_LOW, Bits =< ?CONFIG_DRIFT_HIGH ->
+   L0 = 20 - Bits,
+   L1 = Bits, 
+   B0 = B bsr  Bits,
+   B1 = B band ((1 bsl Bits) - 1),
    <<T:82/bits, _/bits>> = <<A:20, B0:L0, Node/binary, B1:L1, C:20>>,
    T;
 
-encode_t(Node, T) ->
-   encode_t(hid(Node), T).
+encode_t(Bits, Node, T) ->
+   encode_t(Bits, hid(Node), T).
 
 
 %%
 %% @doc
 %% decode k-order number from binary format
 -spec decode(binary()) -> l() | g().
+-spec decode(integer(), binary()) -> l() | g().
 
-decode(<<Prefix:50/bits, Seq:14>>) ->
+decode(Uid) ->
+   decode(?CONFIG_DRIFT, Uid).
+
+decode(_Bits, <<Prefix:50/bits, Seq:14>>) ->
    {uid, decode_lt(Prefix), Seq};
 
-decode(<<Prefix:82/bits, Seq:14>>) ->
-   {Node, T} = decode_gt(Prefix),
+decode(Bits, <<Prefix:82/bits, Seq:14>>) ->
+   {Node, T} = decode_gt(Bits, Prefix),
    {uid, Node, T, Seq}.
 
 decode_lt(<<A:20, B:20, C:10>> ) ->
    {A, B, C bsl 10}.
 
-decode_gt(T) ->
-   L0 = 20 - ?CONFIG_DRIFT,
-   L1 = ?CONFIG_DRIFT, 
+decode_gt(Bits, T) ->
+   L0 = 20 - Bits,
+   L1 = Bits, 
    <<A:20, B:L0, Node:4/binary, C:L1, D:10>> = T,
    case hid(erlang:node()) of
       Node ->
-         {erlang:node(), {A, B bsl ?CONFIG_DRIFT + C, D bsl 10}};
+         {erlang:node(), {A, B bsl Bits + C, D bsl 10}};
       _    ->
-         {Node, {A, B bsl ?CONFIG_DRIFT + C, D bsl 10}}
+         {Node, {A, B bsl Bits + C, D bsl 10}}
    end.
 
 %%%----------------------------------------------------------------------------   
