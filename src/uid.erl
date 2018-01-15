@@ -29,6 +29,10 @@
   ,encode/2
   ,decode/1
   ,decode/2
+  ,encode64/1
+  ,encode64/2
+  ,decode64/1
+  ,decode64/2
 ]).
 %% k-order utility
 -export([
@@ -178,6 +182,48 @@ decode_gt(Bits, T) ->
       _    ->
          {Node, {A, B bsl Bits + C, D bsl 10}}
    end.
+
+%%
+%% @doc
+%% encode k-order number to base64 url 
+-spec encode64(l() | g()) -> binary().
+-spec encode64(integer(), l() | g()) -> binary().
+
+encode64(Uid) ->
+   encode64(?CONFIG_DRIFT, Uid).
+
+encode64(Drift, Uid) ->
+   << << (encode_digit(X)) >> || <<X>> <= base64:encode( encode(Drift, Uid) ), X =/= $= >>.
+
+encode_digit($/) -> $_;
+encode_digit($+) -> $-;
+encode_digit(X)  -> X.
+
+%%
+%% @doc
+%% decode k-order number from base64 url 
+-spec decode64(binary()) -> l() | g().
+-spec decode64(integer(), binary()) -> l() | g().
+
+decode64(Uid) ->
+   decode64(?CONFIG_DRIFT, Uid).
+
+decode64(Drift, Uid) ->
+   decode(Drift, base64:decode(<< << (decode_digit(X)) >> || <<X>> <= decode_pad(Uid) >>) ).
+
+decode_pad(Bin)
+ when byte_size(Bin) rem 4 =:= 2 ->
+   <<Bin/binary, $=, $=>>;
+decode_pad(Bin)
+ when byte_size(Bin) rem 4 =:= 3 ->
+   <<Bin/binary, $=>>;
+decode_pad(Bin) ->
+   Bin.
+
+decode_digit($_) -> $/;
+decode_digit($-) -> $+;
+decode_digit(D)  -> D.
+
 
 %%%----------------------------------------------------------------------------   
 %%%
