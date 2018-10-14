@@ -55,7 +55,7 @@
 -export_type([uid/0, l/0, g/0, vclock/0]).
 -type uid()    :: l() | g().
 -type l()      :: {uid, t(), seq()}.
--type g()      :: {uid, id(), g(), seq()}.
+-type g()      :: {uid, id(), t(), seq()}.
 
 -type t()      :: {integer(), integer(), integer()}.
 -type seq()    :: <<_:14>>.
