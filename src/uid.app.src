@@ -1,14 +1,19 @@
 {application, uid,
    [
       {description, "k-ordered unique identity"},
-      {vsn,         "1.3.2"},
+      {vsn,         "1.3.3"},
       {modules,     []},
       {registered,  []},
       {applications,[
          kernel,
          stdlib
       ]},
-      {mod, {uid_app, []}},
-      {env, []}
+      {env, []},
+
+      {licenses, ["Apache"]},
+      {maintainers, ["Dmitry Kolesnikov"]},
+      {links, [
+         {"GitHub", "https://github.com/fogfish/uid"}
+      ]}
    ]
 }.  

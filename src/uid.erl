@@ -367,19 +367,7 @@ diff(A, [{uid, Node, _, _} = X|B]) ->
 %% local time stamp
 t() ->
    {A, B, C} = os:timestamp(),
-   % B = B0 bsr  ?CONFIG_DRIFT,
-   % C = B0 band ((1 bsl ?CONFIG_DRIFT) - 1),
-   % D = ,
    {A, B, C band 16#ffc00}.
-
-%%
-%% global time stamp
-% gt(Node) ->
-%    {A, B0, C0} = os:timestamp(),
-%    B = B0 bsr  ?CONFIG_DRIFT,
-%    C = B0 band ((1 bsl ?CONFIG_DRIFT) - 1),
-%    D = C0 band 16#ffc00,
-%    {A, B, Node, C, D}.
 
 %%
 %% locally unique sequential number 14-bit length 
