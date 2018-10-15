@@ -144,7 +144,7 @@ The commit message helps us to write a good release note, speed-up review proces
 
 ### bugs
 
-If you experience any issues with the library, please let us know via [GitHub issues](https://github.com/fogfish/datum/issue). We appreciate detailed and accurate reports that help us to identity and replicate the issue. 
+If you experience any issues with the library, please let us know via [GitHub issues](https://github.com/fogfish/uid/issue). We appreciate detailed and accurate reports that help us to identity and replicate the issue. 
 
 * **Specify** the configuration of your environment. Include which operating system you use and the versions of runtime environments. 
 
