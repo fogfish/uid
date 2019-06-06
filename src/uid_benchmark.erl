@@ -3,7 +3,6 @@
 -module(uid_benchmark).
 
 -export([run/0]).
--include_lib("eunit/include/eunit.hrl").
 
 -define(N,        4).
 -define(LOOP,     1 * 1000 * 1000).

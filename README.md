@@ -1,6 +1,10 @@
 # k-ordered unique identity
 
-The library develops an identity schema suitable for rough, lexicographical objects ordering.
+The library develops an identity schema suitable for rough, lexicographical objects ordering in distributed systems.
+
+[![Build Status](https://secure.travis-ci.org/fogfish/uid.svg?branch=master)](http://travis-ci.org/fogfish/uid) 
+[![Coverage Status](https://coveralls.io/repos/github/fogfish/uid/badge.svg?branch=master)](https://coveralls.io/github/fogfish/uid?branch=master) 
+[![Hex.pm](https://img.shields.io/hexpm/v/uid.svg)](https://hex.pm/packages/uid) 
 
 
 ## Inspiration
@@ -26,9 +30,9 @@ The library has developed a dual schema: 64-bit unique identity to be used withi
 
 The k-ordered value consists of time-stamp with millisecond resolution (50-bit) that is used to roughly sort events. The time-stamp ensures distinct sorting within virtual machine where system clock is controlled by operation system. A locally monotonic padding (14-bits) prevents the collisions (Note: 14-bits allows to have about 16K allocations per millisecond). 
 
-The time-stamp based sorting fails on distributed systems unless it implements precises time synchronization protocol. Therefore, it was decided to uses location aspect (node fingerprint) as component of k-ordered value. This component allows to keep ordering consistent even if clocks on other node is skewed. The developed schema allows to control the quality of the ordering (precision) depending on the length of _neighborhood interval_. The neighborhood interval is a time span where the location has higher priority then time.
+The time-stamp based sorting fails on distributed systems unless it implements precises time synchronization protocol. Therefore, it was decided to uses location aspect (node fingerprint) as component of k-ordered value. This component allows to keep ordering consistent even if clocks on other node is skewed. The developed schema allows to control the quality of the ordering (precision) depending on the length of _neighborhood interval_. The neighborhood interval is a time span where the location has higher priority then time. The usage of this time interval relaxes a clock synchronization requirements while preserving an ordering.  
 
-The library represents k-ordered values as tuples but implements binary and url friendly base64 encoding. The serialization protocol has been changed after library version `1.2.0`. New serialization improves allocation performance of k-order values. It uses Erlang OTP/18 feature `erlang:unique_integer(...)` to generate locally monotonic value. The library allocates about 13M k-ordered values per second on reference hardware.
+The library represents k-ordered values as tuples but implements binary and url friendly encoding similar to base64. The serialization protocol has been changed after library version `1.2.0`. New serialization improves allocation performance of k-order values. It uses Erlang OTP/18 feature `erlang:unique_integer(...)` to generate locally monotonic value. The library allocates about 13M k-ordered values per second on reference hardware.
 
 ### 64-bit, local
 
@@ -101,7 +105,7 @@ uid:encode(B).
 
 %%
 %% encode value to base64
-%%   <<"AGA5igPrJzJ7aYAB">>
+%%   <<".5.tXVEf8n8vPN.0">>
 uid:encode64(B).
 ```
 
@@ -109,9 +113,11 @@ uid:encode64(B).
 
 The library is Apache 2.0 licensed and accepts contributions via GitHub pull requests:
 
-* Fork the repository on GitHub
-* Read build instructions
-* Make a pull request
+1. Fork it
+2. Create your feature branch (`git checkout -b my-new-feature`)
+3. Commit your changes (`git commit -am 'Added some feature'`)
+4. Push to the branch (`git push origin my-new-feature`)
+5. Create new Pull Request
 
 The build process requires [Erlang/OTP](http://www.erlang.org/downloads) version 19.0 or later and essential build tools.
 
@@ -156,9 +162,4 @@ If you experience any issues with the library, please let us know via [GitHub is
 
 ## License
 
-Copyright 2012 Dmitry Kolesnikov
-
-Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2.0.
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
-
+[![See LICENSE](https://img.shields.io/github/license/fogfish/uid.svg?style=for-the-badge)](LICENSE)
