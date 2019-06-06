@@ -21,33 +21,33 @@
 %% k-order interface
 -export([
    z/0
-  ,l/0
-  ,l/1
-  ,g/0
-  ,g/1
-  ,encode/1
-  ,encode/2
-  ,decode/1
-  ,decode/2
-  ,encode64/1
-  ,encode64/2
-  ,decode64/1
-  ,decode64/2
+,  l/0
+,  l/1
+,  g/0
+,  g/1
+,  encode/1
+,  encode/2
+,  decode/1
+,  decode/2
+,  encode64/1
+,  encode64/2
+,  decode64/1
+,  decode64/2
 ]).
 %% k-order utility
 -export([
    gtol/1
-  ,d/2
-  ,t/1
+,  d/2
+,  t/1
 ]).
 %% v-clock interface
 -export([
-   vclock/0,
-   vclock/1,
-   join/2,
-   descend/2,
-   descend/3,
-   diff/2
+   vclock/0
+,  vclock/1
+,  join/2
+,  descend/2
+,  descend/3
+,  diff/2
 ]).
 
 %%
@@ -73,7 +73,7 @@
 %%
 -spec z() -> l().
 z() ->
-   {uid, {0,0,0,0}, 0}.
+   {uid, {0,0,0}, 0}.
    
 
 %%
@@ -193,11 +193,7 @@ encode64(Uid) ->
    encode64(?CONFIG_DRIFT, Uid).
 
 encode64(Drift, Uid) ->
-   << << (encode_digit(X)) >> || <<X>> <= base64:encode( encode(Drift, Uid) ), X =/= $= >>.
-
-encode_digit($/) -> $_;
-encode_digit($+) -> $-;
-encode_digit(X)  -> X.
+  uid_b64:encode( encode(Drift, Uid) ).
 
 %%
 %% @doc
@@ -209,21 +205,7 @@ decode64(Uid) ->
    decode64(?CONFIG_DRIFT, Uid).
 
 decode64(Drift, Uid) ->
-   decode(Drift, base64:decode(<< << (decode_digit(X)) >> || <<X>> <= decode_pad(Uid) >>) ).
-
-decode_pad(Bin)
- when byte_size(Bin) rem 4 =:= 2 ->
-   <<Bin/binary, $=, $=>>;
-decode_pad(Bin)
- when byte_size(Bin) rem 4 =:= 3 ->
-   <<Bin/binary, $=>>;
-decode_pad(Bin) ->
-   Bin.
-
-decode_digit($_) -> $/;
-decode_digit($-) -> $+;
-decode_digit(D)  -> D.
-
+   decode(Drift, uid_b64:decode(Uid)).
 
 %%%----------------------------------------------------------------------------   
 %%%
