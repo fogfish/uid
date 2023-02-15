@@ -359,4 +359,4 @@ seq() ->
 %%
 %% host unique identifier
 hid(Node) ->
-   <<(erlang:phash(Node, 1 bsl 32)):32>>.
+   <<(erlang:phash2(Node, 1 bsl 32)):32>>.
